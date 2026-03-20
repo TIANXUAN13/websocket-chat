@@ -43,16 +43,6 @@ http://127.0.0.1:8000/chat/login/
 daphne -b 127.0.0.1 -p 8000 websocket_project.asgi:application
 ```
 
-## 关于当前仓库里的 venv
-
-仓库里现在已经有一个 `venv/` 目录，但我检查过，这个环境当前几乎只有 `pip`，没有安装 Django，所以直接使用它会报错：
-
-```text
-ModuleNotFoundError: No module named 'django'
-```
-
-更稳妥的做法是重新创建一个新的虚拟环境，比如 `.venv/`，避免和旧环境混淆。
-
 ## 当前最小依赖
 
 `requirements.txt` 已经整理为项目当前实际需要的最小依赖：
