@@ -1,0 +1,76 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册 - 聊天室</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
+</head>
+<body class="auth-page">
+    <main class="auth-layout">
+        <section class="auth-showcase">
+            <span class="section-label">Join The Room</span>
+            <h1>创建一个账号，马上进入实时聊天的节奏里。</h1>
+            <p>注册完成后你就能创建房间、查看在线成员、保存聊天历史，并在同一个界面里完成整个聊天流程。</p>
+            <div class="showcase-grid">
+                <div class="showcase-card">
+                    <strong>房间与身份更明确</strong>
+                    <span>房主标识、在线状态和历史消息会直接展示在页面核心区域，信息不会散掉。</span>
+                </div>
+                <div class="showcase-card">
+                    <strong>界面更统一</strong>
+                    <span>登录页、大厅、聊天页与管理页采用同一套颜色和层次，切换更自然。</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="auth-panel">
+            <div class="brand-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="8.5" cy="7" r="4"/>
+                    <line x1="20" y1="8" x2="20" y2="14"/>
+                    <line x1="23" y1="11" x2="17" y2="11"/>
+                </svg>
+            </div>
+            <h2>创建账号</h2>
+            <p>填写账号信息后就可以进入大厅开始聊天。</p>
+
+            <form class="auth-form" method="post">
+                {% csrf_token %}
+                <div>
+                    <label class="field-label" for="id_username">用户名</label>
+                    {{ form.username }}
+                    {% if form.username.errors %}
+                        <ul class="errorlist">{% for error in form.username.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="field-label" for="id_password1">密码</label>
+                    {{ form.password1 }}
+                    {% if form.password1.errors %}
+                        <ul class="errorlist">{% for error in form.password1.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="field-label" for="id_password2">确认密码</label>
+                    {{ form.password2 }}
+                    {% if form.password2.errors %}
+                        <ul class="errorlist">{% for error in form.password2.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                    {% endif %}
+                </div>
+                <button class="btn btn-primary" type="submit">创建账号</button>
+            </form>
+
+            <div class="auth-footer">
+                已有账号？<a href="{% url 'login' %}">立即登录</a>
+            </div>
+
+            <div class="hint-card">
+                用户名建议简短好记，密码请至少 8 位。注册成功后系统会自动登录并进入大厅。
+            </div>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,51 @@
+{% extends 'chat/admin/base.html' %}
+
+{% block title %}会话管理{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <span class="section-label">Session Watch</span>
+    <h1>会话管理</h1>
+    <p>追踪当前活跃会话，必要时手动移除异常或过期的登录状态。</p>
+</div>
+
+<div class="section panel-card">
+        <div class="table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>用户</th>
+                        <th>会话键</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in sessions %}
+                    <tr>
+                        <td>{{ session.user.username }}</td>
+                        <td>
+                            <code>{{ session.session_key }}</code>
+                        </td>
+                        <td>{{ session.created_at|date:"Y-m-d H:i" }}</td>
+                        <td>
+                            <form method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="session_id" value="{{ session.id }}">
+                                <button type="submit" name="action" value="delete" class="btn btn-danger btn-sm"
+                                        onclick="return confirm('确定要删除此会话吗？这将强制用户重新登录。')">
+                                    删除会话
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">暂无活跃会话</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

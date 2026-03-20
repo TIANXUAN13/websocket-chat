@@ -1,0 +1,114 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 聊天室</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
+</head>
+<body class="auth-page">
+    <main class="auth-layout">
+        <section class="auth-showcase auth-playground auth-playground-emoji" id="auth-playground">
+            <div class="showcase-topline">
+                <span class="section-label">闲聊室</span>
+                <span class="showcase-note">跟着鼠标看看它们</span>
+            </div>
+
+            <div class="emoji-stage">
+                <div class="emoji-pet" data-creature>
+                    <div class="emoji-paws" aria-hidden="true">🐾🐾</div>
+                    <div class="emoji-face" aria-hidden="true">🐶</div>
+                </div>
+                <div class="emoji-pet" data-creature>
+                    <div class="emoji-paws" aria-hidden="true">🐾🐾</div>
+                    <div class="emoji-face" aria-hidden="true">🐱</div>
+                </div>
+                <div class="emoji-pet" data-creature>
+                    <div class="emoji-paws" aria-hidden="true">🐾🐾</div>
+                    <div class="emoji-face" aria-hidden="true">🐻‍❄️</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="auth-panel">
+            <div class="brand-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+            </div>
+            <h2>欢迎回来</h2>
+            <p>登录后进入房间列表。</p>
+
+            {% if form.errors %}
+                <div class="error-msg">用户名或密码错误，请重新输入。</div>
+            {% endif %}
+
+            <form class="auth-form" method="post">
+                {% csrf_token %}
+                <div>
+                    <label class="field-label" for="id_username">用户名</label>
+                    <input class="form-input" id="id_username" type="text" name="username" placeholder="请输入用户名" required autofocus>
+                </div>
+                <div>
+                    <label class="field-label" for="id_password">密码</label>
+                    <input class="form-input" id="id_password" type="password" name="password" placeholder="请输入密码" required>
+                </div>
+                <button class="btn btn-primary" type="submit">登录</button>
+            </form>
+
+            <div class="auth-footer">
+                还没有账号？<a href="{% url 'register' %}">立即注册</a>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const playground = document.getElementById('auth-playground');
+        const creatures = Array.from(document.querySelectorAll('[data-creature]'));
+        const passwordInput = document.getElementById('id_password');
+
+        function updateCreatures(clientX, clientY) {
+            const bounds = playground.getBoundingClientRect();
+            const centerX = bounds.left + bounds.width / 2;
+            const centerY = bounds.top + bounds.height / 2;
+            const offsetX = (clientX - centerX) / bounds.width;
+            const offsetY = (clientY - centerY) / bounds.height;
+
+            creatures.forEach((creature, index) => {
+                const config = [
+                    { rotate: 10, shiftX: 18, shiftY: 10, floatY: 8 },
+                    { rotate: 14, shiftX: 24, shiftY: 12, floatY: 10 },
+                    { rotate: 9, shiftX: 16, shiftY: 8, floatY: 7 }
+                ][index];
+
+                creature.style.setProperty('--pet-rotate', `${offsetX * config.rotate}deg`);
+                creature.style.setProperty('--pet-x', `${offsetX * config.shiftX}px`);
+                creature.style.setProperty('--pet-y', `${offsetY * config.shiftY}px`);
+                creature.style.setProperty('--pet-lift', `${Math.abs(offsetX) * config.floatY}px`);
+            });
+        }
+
+        playground.addEventListener('mousemove', (event) => {
+            updateCreatures(event.clientX, event.clientY);
+        });
+
+        playground.addEventListener('mouseleave', () => {
+            creatures.forEach((creature) => {
+                creature.style.setProperty('--pet-rotate', '0deg');
+                creature.style.setProperty('--pet-x', '0px');
+                creature.style.setProperty('--pet-y', '0px');
+                creature.style.setProperty('--pet-lift', '0px');
+            });
+        });
+
+        passwordInput.addEventListener('focus', () => {
+            playground.classList.add('peek-mode');
+        });
+
+        passwordInput.addEventListener('blur', () => {
+            playground.classList.remove('peek-mode');
+        });
+    </script>
+</body>
+</html>

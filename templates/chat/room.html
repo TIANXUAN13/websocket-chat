@@ -1,0 +1,380 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ room_name }} - 聊天室</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
+</head>
+<body class="room-page">
+    <header class="room-topbar panel-card">
+        <div class="room-header-main">
+            <a href="{% url 'chat_index' %}" class="btn btn-secondary back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                返回大厅
+            </a>
+            <div class="room-identity">
+                <div class="room-glyph room-avatar room-avatar-large">{{ room.avatar }}</div>
+                <div class="room-title-block">
+                    <strong>{{ room.name }}</strong>
+                    <span>{{ room.description }}</span>
+                    <div class="room-stats-inline">
+                        <span class="pill pill-muted">总人数 <strong id="total-member-count">{{ room_total_members }}</strong></span>
+                        <span class="pill pill-muted">在线人数 <strong id="online-member-count">1</strong></span>
+                        {% if is_owner %}
+                            <span class="pill pill-owner">房主</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="status-cluster">
+            {% if is_owner %}
+                <button class="settings-trigger" type="button" onclick="toggleRoomSettings()" aria-label="房间设置">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
+                        <circle cx="12" cy="12" r="3.2"/>
+                    </svg>
+                </button>
+            {% endif %}
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">连接中</span>
+        </div>
+    </header>
+
+    {% if is_owner %}
+        <div class="settings-overlay" id="settings-overlay" onclick="toggleRoomSettings(false)"></div>
+        <aside class="room-settings-drawer panel-card" id="room-settings-drawer">
+            <div class="drawer-head">
+                <div>
+                    <strong>房间设置</strong>
+                    <span>修改群资料或执行房间管理操作</span>
+                </div>
+                <button class="drawer-close" type="button" onclick="toggleRoomSettings(false)" aria-label="关闭设置">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <form class="room-settings-form" method="post">
+                {% csrf_token %}
+                <div class="stack">
+                    <label class="field-label" for="room_avatar">群头像</label>
+                    <select class="form-input" id="room_avatar" name="room_avatar">
+                        {% for avatar in room_avatars %}
+                            <option value="{{ avatar }}" {% if avatar == room.avatar %}selected{% endif %}>{{ avatar }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="stack">
+                    <label class="field-label" for="room_name">房间名</label>
+                    <input class="form-input" id="room_name" name="room_name" type="text" value="{{ room.name }}" maxlength="100" required>
+                </div>
+                <div class="stack">
+                    <label class="field-label" for="room_description">群简介</label>
+                    <input class="form-input" id="room_description" name="room_description" type="text" value="{{ room.description }}" maxlength="120">
+                </div>
+                <button class="btn btn-secondary" type="submit">保存资料</button>
+            </form>
+
+            <div class="drawer-actions">
+                <button class="btn btn-danger" type="button" onclick="deleteRoom()">删除房间</button>
+            </div>
+        </aside>
+    {% endif %}
+
+    <main class="room-layout">
+        <aside class="user-panel panel-card">
+            <div class="panel-title">
+                <strong>在线成员</strong>
+                <span class="pill pill-muted" id="member-count">1 人</span>
+            </div>
+            <div class="user-list" id="user-list">
+                <div class="user-item">
+                    <div class="user-item-left">
+                        <div class="mini-avatar">{{ user.username.0|upper }}</div>
+                        <span class="user-name-text">{{ user.username }}</span>
+                    </div>
+                    {% if is_owner %}
+                        <span class="pill pill-owner">你</span>
+                    {% endif %}
+                </div>
+            </div>
+        </aside>
+
+        <section class="chat-main panel-card">
+            <div class="chat-head">
+                <div>
+                    <strong>房间对话</strong>
+                    <span>进入后会自动同步欢迎消息与最近聊天记录。</span>
+                </div>
+                <span class="pill pill-muted">WebSocket 实时连接</span>
+            </div>
+
+            <div class="load-more-wrap" id="load-more-container">
+                <button class="load-more-btn" id="load-more-btn" style="display:none;">加载更多历史消息</button>
+            </div>
+
+            <div class="chat-messages" id="chat-messages">
+                <div class="empty-chat">
+                    <div class="empty-chat-card">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                        </svg>
+                        <p>欢迎来到 #{{ room_name }}，等连接完成后就可以开始实时聊天。</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <input class="form-input" type="text" id="message-input" placeholder="输入消息，按 Enter 发送..." disabled>
+                <button class="btn btn-primary" id="send-btn" disabled>发送消息</button>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const roomName = {{ room_name_json }};
+        const isOwner = {{ is_owner|yesno:"true,false" }};
+        const messagesDiv = document.getElementById('chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const userList = document.getElementById('user-list');
+        const memberCount = document.getElementById('member-count');
+        const onlineMemberCount = document.getElementById('online-member-count');
+        const settingsDrawer = document.getElementById('room-settings-drawer');
+        const settingsOverlay = document.getElementById('settings-overlay');
+
+        const username = '{{ user.username }}';
+        let historyOffset = 0;
+        let isLoadingHistory = false;
+        let hasMoreHistory = false;
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = protocol + '//' + window.location.host + '/ws/chat/' + roomName + '/';
+        const chatSocket = new WebSocket(wsUrl);
+        const loadMoreBtn = document.getElementById('load-more-btn');
+
+        chatSocket.onopen = function() {
+            messageInput.disabled = false;
+            sendBtn.disabled = false;
+            statusDot.classList.add('connected');
+            statusText.textContent = '已连接';
+            messageInput.focus();
+
+            chatSocket.send(JSON.stringify({
+                'type': 'join',
+                'user': username,
+                'is_owner': isOwner
+            }));
+        };
+
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+
+            if (data.type === 'user_list') {
+                updateUserList(data.users);
+                return;
+            }
+
+            if (data.type === 'history') {
+                handleHistory(data);
+                return;
+            }
+
+            if (data.type === 'kick') {
+                alert('您已被房主踢出房间');
+                window.location.href = '/chat/';
+                return;
+            }
+
+            if (data.type === 'delete_room') {
+                alert('房间已被房主删除');
+                window.location.href = '/chat/';
+                return;
+            }
+
+            appendMessage(data);
+        };
+
+        function appendMessage(data, prepend = false, fallbackTime = null) {
+            const emptyChat = messagesDiv.querySelector('.empty-chat');
+            if (emptyChat) {
+                emptyChat.remove();
+            }
+
+            const msgDiv = document.createElement('div');
+            let msgClass = 'message';
+            if (data.type === 'system') msgClass += ' system';
+            else if (data.type === 'kick') msgClass += ' kick';
+            else if (data.type === 'delete_room') msgClass += ' delete-room';
+            else if (data.user === username) msgClass += ' mine';
+            else msgClass += ' other';
+
+            msgDiv.className = msgClass;
+
+            const date = data.timestamp ? new Date(data.timestamp) : fallbackTime || new Date();
+            const timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+
+            let html = '';
+            if (data.type === 'system' || data.type === 'kick' || data.type === 'delete_room') {
+                html = `<span>${escapeHtml(data.message)}</span>`;
+            } else {
+                html = `<div class="msg-user">${escapeHtml(data.user)}</div>`;
+                html += `<div class="msg-text">${escapeHtml(data.message)}</div>`;
+                html += `<div class="msg-time">${timeStr}</div>`;
+            }
+            msgDiv.innerHTML = html;
+
+            if (prepend) {
+                messagesDiv.insertBefore(msgDiv, messagesDiv.firstChild);
+            } else {
+                messagesDiv.appendChild(msgDiv);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        }
+
+        function updateUserList(users) {
+            const entries = Object.entries(users);
+            userList.innerHTML = '';
+            memberCount.textContent = `${entries.length} 人`;
+            onlineMemberCount.textContent = `${entries.length}`;
+
+            for (const [user, isOwnerUser] of entries) {
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+
+                let actionHtml = '';
+                if (user === username) {
+                    actionHtml = isOwnerUser ? '<span class="pill pill-owner">你</span>' : '<span class="pill pill-muted">你</span>';
+                } else if (isOwner) {
+                    actionHtml = `<button class="kick-btn" onclick="kickUser('${escapeHtml(user)}')">移出</button>`;
+                } else if (isOwnerUser) {
+                    actionHtml = '<span class="pill pill-owner">房主</span>';
+                }
+
+                userItem.innerHTML = `
+                    <div class="user-item-left">
+                        <div class="mini-avatar">${escapeHtml(user[0].toUpperCase())}</div>
+                        <span class="user-name-text">${escapeHtml(user)}</span>
+                    </div>
+                    ${actionHtml}
+                `;
+                userList.appendChild(userItem);
+            }
+        }
+
+        function handleHistory(data) {
+            const messages = data.messages || [];
+
+            if (messages.length > 0) {
+                messages.forEach(msg => appendMessage(msg, true));
+                historyOffset += messages.length;
+                hasMoreHistory = data.has_more;
+                loadMoreBtn.style.display = hasMoreHistory ? 'inline-flex' : 'none';
+            }
+        }
+
+        function loadMoreHistory() {
+            if (isLoadingHistory || !hasMoreHistory) return;
+
+            isLoadingHistory = true;
+            loadMoreBtn.textContent = '加载中...';
+            loadMoreBtn.disabled = true;
+
+            chatSocket.send(JSON.stringify({
+                'type': 'load_more_history',
+                'offset': historyOffset
+            }));
+
+            setTimeout(() => {
+                isLoadingHistory = false;
+                loadMoreBtn.textContent = '加载更多历史消息';
+                loadMoreBtn.disabled = false;
+            }, 1000);
+        }
+
+        function kickUser(user) {
+            if (confirm('确定要踢出 ' + user + ' 吗？')) {
+                chatSocket.send(JSON.stringify({
+                    'type': 'kick',
+                    'user': user,
+                    'kicked_by': username
+                }));
+            }
+        }
+
+        function deleteRoom() {
+            if (confirm('确定要删除房间 #{{ room_name }} 吗？')) {
+                chatSocket.send(JSON.stringify({
+                    'type': 'delete_room',
+                    'user': username
+                }));
+            }
+        }
+
+        function toggleRoomSettings(forceState) {
+            if (!settingsDrawer || !settingsOverlay) return;
+            const shouldOpen = typeof forceState === 'boolean'
+                ? forceState
+                : !settingsDrawer.classList.contains('open');
+            settingsDrawer.classList.toggle('open', shouldOpen);
+            settingsOverlay.classList.toggle('open', shouldOpen);
+        }
+
+        chatSocket.onclose = function() {
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            statusDot.classList.remove('connected');
+            statusText.textContent = '已断开';
+            appendMessage({ type: 'system', message: '连接已断开，请刷新页面重试。' });
+        };
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message && chatSocket.readyState === WebSocket.OPEN) {
+                chatSocket.send(JSON.stringify({
+                    'type': 'chat',
+                    'message': message,
+                    'user': username
+                }));
+                messageInput.value = '';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        sendBtn.addEventListener('click', sendMessage);
+        loadMoreBtn.addEventListener('click', loadMoreHistory);
+
+        messagesDiv.addEventListener('scroll', function() {
+            if (messagesDiv.scrollTop < 50 && hasMoreHistory && !isLoadingHistory) {
+                loadMoreHistory();
+            }
+        });
+
+        window.addEventListener('beforeunload', function() {
+            if (chatSocket.readyState === WebSocket.OPEN) {
+                chatSocket.send(JSON.stringify({
+                    'type': 'leave',
+                    'user': username
+                }));
+            }
+        });
+    </script>
+</body>
+</html>

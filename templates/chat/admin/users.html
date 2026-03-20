@@ -1,0 +1,95 @@
+{% extends 'chat/admin/base.html' %}
+
+{% block title %}用户管理{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <span class="section-label">User Control</span>
+    <h1>用户管理</h1>
+    <p>查看账号状态、地理位置信息和权限，并在需要时进行启用、封禁或删除操作。</p>
+</div>
+
+<div class="section panel-card">
+        <div class="table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>用户名</th>
+                        <th>邮箱</th>
+                        <th>地理位置</th>
+                        <th>管理员</th>
+                        <th>激活状态</th>
+                        <th>注册时间</th>
+                        <th>最后登录</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.email|default:"-" }}</td>
+                        <td>
+                            {% if user.location %}
+                                <div>
+                                    <strong>{{ user.location.city }}</strong>, {{ user.location.country }}
+                                </div>
+                                <div style="font-size: 0.85em; color: #666;">
+                                    {{ user.location.region }}
+                                </div>
+                                <div style="font-size: 0.75em; color: #999;">
+                                    <code>{{ user.location.ip_address }}</code>
+                                </div>
+                            {% else %}
+                                <span class="status-inactive">未知</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.is_superuser %}
+                                <span class="status-active">是</span>
+                            {% else %}
+                                <span class="status-inactive">否</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.is_active %}
+                                <span class="status-active">已激活</span>
+                            {% else %}
+                                <span class="status-inactive">已禁用</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user.date_joined|date:"Y-m-d H:i" }}</td>
+                        <td>{{ user.last_login|date:"Y-m-d H:i"|default:"-" }}</td>
+                        <td>
+                            <form method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="user_id" value="{{ user.id }}">
+                                <div class="action-buttons">
+                                    {% if user.id != request.user.id %}
+                                        <button type="submit" name="action" value="toggle_active" class="btn btn-warning btn-sm">
+                                            {% if user.is_active %}禁用{% else %}启用{% endif %}
+                                        </button>
+                                        <button type="submit" name="action" value="toggle_superuser" class="btn btn-sm">
+                                            {% if user.is_superuser %}取消管理员{% else %}设为管理员{% endif %}
+                                        </button>
+                                        <button type="submit" name="action" value="delete" class="btn btn-danger btn-sm" 
+                                                onclick="return confirm('确定要删除用户 {{ user.username }} 吗？此操作不可撤销！')">
+                                            删除
+                                        </button>
+                                    {% else %}
+                                        <span class="status-active">当前用户</span>
+                                    {% endif %}
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">暂无用户数据</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

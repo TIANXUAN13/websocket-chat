@@ -1,0 +1,49 @@
+{% extends 'chat/admin/base.html' %}
+
+{% block title %}房间管理{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <span class="section-label">Room Control</span>
+    <h1>房间管理</h1>
+    <p>查看当前所有房间，必要时移除不再需要或不合适的聊天空间。</p>
+</div>
+
+<div class="section panel-card">
+        <div class="table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>房间名称</th>
+                        <th>创建者</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for room in rooms %}
+                    <tr>
+                        <td><a href="{% url 'chat_room' room.name %}">{{ room.name }}</a></td>
+                        <td>{{ room.created_by.username|default:"系统" }}</td>
+                        <td>{{ room.created_at|date:"Y-m-d H:i" }}</td>
+                        <td>
+                            <form method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="room_name" value="{{ room.name }}">
+                                <button type="submit" name="action" value="delete" class="btn btn-danger btn-sm"
+                                        onclick="return confirm('确定要删除房间 {{ room.name }} 吗？此操作不可撤销！')">
+                                    删除
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">暂无房间数据</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

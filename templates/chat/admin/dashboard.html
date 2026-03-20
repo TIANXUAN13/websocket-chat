@@ -1,0 +1,100 @@
+{% extends 'chat/admin/base.html' %}
+
+{% block title %}管理员仪表板{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <span class="section-label">Admin Overview</span>
+    <h1>管理员仪表板</h1>
+    <p>从这里快速查看用户、房间和会话的整体状态，再进入细分页面做管理操作。</p>
+</div>
+
+<div class="admin-sections">
+    <div class="stats-grid">
+        <div class="stat-card panel-card">
+            <h3>总用户数</h3>
+            <div class="stat-number">{{ total_users }}</div>
+        </div>
+        <div class="stat-card panel-card">
+            <h3>总房间数</h3>
+            <div class="stat-number">{{ total_rooms }}</div>
+        </div>
+        <div class="stat-card panel-card">
+            <h3>活跃会话</h3>
+            <div class="stat-number">{{ total_sessions }}</div>
+        </div>
+    </div>
+
+    <div class="section panel-card">
+        <h2>快速导航</h2>
+        <div class="nav-links">
+            <a href="{% url 'admin_users' %}" class="nav-link">用户管理</a>
+            <a href="{% url 'admin_rooms' %}" class="nav-link">房间管理</a>
+            <a href="{% url 'admin_sessions' %}" class="nav-link">会话管理</a>
+            <a href="/admin/" class="nav-link">Django Admin</a>
+        </div>
+    </div>
+
+    <div class="section panel-card">
+        <h2>最近注册用户</h2>
+        <div class="table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>用户名</th>
+                        <th>注册时间</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in recent_users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.date_joined|date:"Y-m-d H:i" }}</td>
+                        <td>
+                            {% if user.is_active %}
+                                <span class="status-active">活跃</span>
+                            {% else %}
+                                <span class="status-inactive">禁用</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3">暂无用户数据</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="section panel-card">
+        <h2>最新房间</h2>
+        <div class="table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>房间名称</th>
+                        <th>创建者</th>
+                        <th>创建时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for room in rooms|slice:":5" %}
+                    <tr>
+                        <td><a href="{% url 'chat_room' room.name %}">{{ room.name }}</a></td>
+                        <td>{{ room.created_by.username|default:"系统" }}</td>
+                        <td>{{ room.created_at|date:"Y-m-d H:i" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3">暂无房间数据</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

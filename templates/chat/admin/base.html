@@ -1,0 +1,46 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}管理员界面{% endblock %} - 聊天室管理</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
+</head>
+<body class="admin-page">
+    <header class="admin-header-wrap">
+        <div class="admin-header panel-card">
+            <div class="topbar-group">
+                <div class="brand-mark">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                </div>
+                <div class="brand-title">
+                    <strong>聊天室管理系统</strong>
+                    <span>统一管理用户、房间与在线会话</span>
+                </div>
+            </div>
+            <nav class="admin-nav">
+                <a href="{% url 'admin_dashboard' %}">仪表板</a>
+                <a href="{% url 'admin_users' %}">用户</a>
+                <a href="{% url 'admin_rooms' %}">房间</a>
+                <a href="{% url 'admin_sessions' %}">会话</a>
+                <a href="{% url 'chat_index' %}">聊天室</a>
+                <a href="{% url 'logout' %}">退出</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="admin-container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="message {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        {% block content %}
+        {% endblock %}
+    </main>
+</body>
+</html>

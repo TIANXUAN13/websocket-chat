@@ -1,0 +1,212 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天室</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
+</head>
+<body class="lobby-page">
+    <header class="topbar panel-card">
+        <div class="topbar-group">
+            <div class="brand-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+            </div>
+            <div class="brand-title">
+                <strong>闲聊室</strong>
+                <span>随时回来坐坐，找个房间聊聊天。</span>
+            </div>
+        </div>
+        <div class="topbar-group">
+            <div class="user-chip">
+                <div class="avatar">{{ user.username.0|upper }}</div>
+                <div class="brand-title">
+                    <strong>{{ user.username }}</strong>
+                    <span>{% if user.is_superuser %}今天也来看看大家聊得怎么样{% else %}欢迎回来，挑个房间坐坐吧{% endif %}</span>
+                </div>
+            </div>
+            {% if user.is_superuser %}
+                <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary">管理后台</a>
+            {% endif %}
+            <a href="{% url 'logout' %}" class="btn btn-secondary">退出登录</a>
+        </div>
+    </header>
+
+    {% if messages %}
+        <div class="toast-container">
+            {% for message in messages %}
+                <div class="toast {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="lobby-layout">
+        <aside class="sidebar-card panel-card">
+            <div class="sidebar-heading">
+                <strong>房间列表</strong>
+                <span>新建房间，或者直接进入。</span>
+            </div>
+
+            <form class="create-room-card stack" method="post" action="{% url 'chat_index' %}">
+                {% csrf_token %}
+                <label class="field-label" for="room_name">新建房间</label>
+                <input class="form-input" id="room_name" type="text" name="room_name" placeholder="例如：产品讨论 / 深夜摸鱼" required>
+                <div class="stack">
+                    <label class="field-label" for="room_avatar">群头像</label>
+                    <select class="form-input" id="room_avatar" name="room_avatar">
+                        {% for avatar in room_avatars %}
+                            <option value="{{ avatar }}">{{ avatar }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="stack">
+                    <label class="field-label" for="room_description">群简介</label>
+                    <input class="form-input" id="room_description" type="text" name="room_description" placeholder="一句话介绍这个房间" maxlength="120">
+                </div>
+                <button class="btn btn-primary" type="submit">创建房间</button>
+            </form>
+
+            <div class="room-search-card">
+                <label class="field-label" for="room-search">搜索房间</label>
+                <input class="form-input" id="room-search" type="text" placeholder="输入房间名搜索">
+            </div>
+
+            <div class="room-list" id="room-list">
+                {% if rooms %}
+                    {% for room in rooms %}
+                        <div class="room-card" data-room-name="{{ room.name|lower }}" data-room-description="{{ room.description|lower }}">
+                            <a href="{% url 'chat_room' room.name %}" class="room-card-main">
+                                <div class="room-glyph room-avatar">{{ room.avatar }}</div>
+                                <div>
+                                    <span class="room-title">{{ room.name }}</span>
+                                    <div class="room-summary">{{ room.description }}</div>
+                                    <div class="room-meta">
+                                        <span>{{ room.total_members }} 人</span>
+                                        <span>{% if room.created_by %}创建者：{{ room.created_by.username }}{% else %}系统房间{% endif %}</span>
+                                        {% if room.created_by == user %}
+                                            <span class="pill pill-owner">房主</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </a>
+                            <div class="room-actions">
+                                <a href="{% url 'chat_room' room.name %}" class="btn btn-secondary">进入</a>
+                                {% if room.created_by == user %}
+                                    <form method="post" action="{% url 'delete_room' room.name %}" onsubmit="return confirm('确定删除这个房间吗？');">
+                                        {% csrf_token %}
+                                        <button class="link-ghost" type="submit">删除</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="create-room-card">
+                        <strong class="room-title">还没有房间</strong>
+                        <div class="room-meta">
+                            <span>先新建一个房间吧。</span>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </aside>
+
+        <section class="content-card panel-card">
+            <div class="content-hero">
+                <span class="section-label" id="welcome-label">欢迎回来</span>
+                <h1 id="welcome-title">今天想聊点什么？</h1>
+                <p id="welcome-desc">左边有大家已经建好的房间，也可以自己新开一个。慢慢来，先找个顺眼的话题进去看看。</p>
+
+                <div class="hero-grid">
+                    <div class="hero-card">
+                        <strong id="hero-card-1-title">随便坐坐</strong>
+                        <span id="hero-card-1-desc">想安静围观也行，想马上开聊也行，这里留给你一个轻松开始的地方。</span>
+                    </div>
+                    <div class="hero-card">
+                        <strong id="hero-card-2-title">找人说话</strong>
+                        <span id="hero-card-2-desc">看看左边有没有熟悉的房间名，说不定刚好有人在线等你接话。</span>
+                    </div>
+                    <div class="hero-card">
+                        <strong id="hero-card-3-title">开个新话题</strong>
+                        <span id="hero-card-3-desc">如果没有合适的房间，就自己起个名字，把大家喊进来一起聊。</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const roomSearchInput = document.getElementById('room-search');
+        const roomCards = Array.from(document.querySelectorAll('.room-card[data-room-name]'));
+        const welcomeVariants = [
+            {
+                label: '欢迎回来',
+                title: '今天想聊点什么？',
+                desc: '左边有大家已经建好的房间，也可以自己新开一个。慢慢来，先找个顺眼的话题进去看看。',
+                cards: [
+                    { title: '随便坐坐', desc: '想安静围观也行，想马上开聊也行，这里留给你一个轻松开始的地方。' },
+                    { title: '找人说话', desc: '看看左边有没有熟悉的房间名，说不定刚好有人在线等你接话。' },
+                    { title: '开个新话题', desc: '如果没有合适的房间，就自己起个名字，把大家喊进来一起聊。' }
+                ]
+            },
+            {
+                label: '今天也见面了',
+                title: '先挑个房间，聊聊最近的事。',
+                desc: '不管是正经讨论还是随口闲聊，这里都不用着急。选一个房间进去，话题自然就会开始。',
+                cards: [
+                    { title: '老地方见', desc: '熟悉的房间往往已经有人在，你进去之后就能接上之前的话头。' },
+                    { title: '慢慢热场', desc: '没想好说什么也没关系，先看看大家在聊什么，再决定要不要加入。' },
+                    { title: '自己起头', desc: '一个简单的房间名就够了，剩下的内容交给聊天慢慢展开。' }
+                ]
+            },
+            {
+                label: '来得正好',
+                title: '找个舒服的话题，把今天过得轻一点。',
+                desc: '左边是房间，右边留给你一点缓冲。挑一个想进去的地方，或者顺手开个新的。',
+                cards: [
+                    { title: '看看大家在聊啥', desc: '有时候只要点进去看两眼，就能遇到刚好想接的话题。' },
+                    { title: '喊朋友进来', desc: '新建一个房间，名字随意一点，反而更像真正的聊天。' },
+                    { title: '轻松开始', desc: '不需要很正式，一句“在吗”或者“今天真累”就已经足够。' }
+                ]
+            },
+            {
+                label: '你好呀',
+                title: '房间都在左边，热闹和安静都给你留着。',
+                desc: '想找人聊两句、继续昨天的话题，或者只是开个新的角落待一会儿，都可以从这里开始。',
+                cards: [
+                    { title: '继续昨天的话题', desc: '如果某个房间名字很眼熟，进去看看，也许上次的聊天还没讲完。' },
+                    { title: '认识新朋友', desc: '不同房间常常有不同气氛，说不定能碰到聊得来的人。' },
+                    { title: '自己留个角落', desc: '开个属于自己的小房间，把想聊的话慢慢放进去。' }
+                ]
+            }
+        ];
+
+        const selectedWelcome = welcomeVariants[Math.floor(Math.random() * welcomeVariants.length)];
+
+        document.getElementById('welcome-label').textContent = selectedWelcome.label;
+        document.getElementById('welcome-title').textContent = selectedWelcome.title;
+        document.getElementById('welcome-desc').textContent = selectedWelcome.desc;
+        document.getElementById('hero-card-1-title').textContent = selectedWelcome.cards[0].title;
+        document.getElementById('hero-card-1-desc').textContent = selectedWelcome.cards[0].desc;
+        document.getElementById('hero-card-2-title').textContent = selectedWelcome.cards[1].title;
+        document.getElementById('hero-card-2-desc').textContent = selectedWelcome.cards[1].desc;
+        document.getElementById('hero-card-3-title').textContent = selectedWelcome.cards[2].title;
+        document.getElementById('hero-card-3-desc').textContent = selectedWelcome.cards[2].desc;
+
+        if (roomSearchInput) {
+            roomSearchInput.addEventListener('input', (event) => {
+                const keyword = event.target.value.trim().toLowerCase();
+                roomCards.forEach((card) => {
+                    const roomName = card.dataset.roomName || '';
+                    const roomDescription = card.dataset.roomDescription || '';
+                    const matched = !keyword || roomName.includes(keyword) || roomDescription.includes(keyword);
+                    card.style.display = matched ? 'flex' : 'none';
+                });
+            });
+        }
+    </script>
+</body>
+</html>
