@@ -1,0 +1,74 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>添加好友</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322i">
+</head>
+<body class="lobby-page">
+    <header class="topbar panel-card">
+        <div class="topbar-group">
+            <a href="{% url 'chat_index' %}" class="btn btn-secondary back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                返回大厅
+            </a>
+            <div class="brand-title">
+                <strong>添加好友</strong>
+                <span>输入对方的好友 ID 发起申请。</span>
+            </div>
+        </div>
+    </header>
+
+    {% if messages %}
+        <div class="toast-container">
+            {% for message in messages %}
+                <div class="toast {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="social-layout">
+        {% include 'chat/_module_rail.html' with active_section='friends' include_lobby_entry=False %}
+        <section class="content-card panel-card narrow-content">
+            <div class="content-hero">
+                <span class="section-label">好友申请</span>
+                <h1>你的好友 ID 是 {{ chat_profile.friend_id }}</h1>
+                <p>把自己的 ID 发给别人，也可以在下面输入对方的 ID 来添加。</p>
+            </div>
+
+            <form class="settings-section profile-settings-form" method="post">
+                {% csrf_token %}
+                <div class="stack">
+                    <label class="field-label" for="friend_id">对方好友 ID</label>
+                    <input class="form-input" id="friend_id" type="text" name="friend_id" minlength="8" maxlength="11" placeholder="输入 8-11 位好友 ID" required>
+                </div>
+                <button class="btn btn-primary" type="submit">发送好友申请</button>
+            </form>
+
+            {% if recent_requests %}
+                <div class="settings-section">
+                    <div class="settings-section-head">
+                        <strong>最近发出的申请</strong>
+                        <span>方便你确认最近都加了谁。</span>
+                    </div>
+                    <div class="friend-grid">
+                        {% for item in recent_requests %}
+                            <div class="friend-card simple-card">
+                                <strong class="room-title">{{ item.recipient.username }}</strong>
+                                <div class="room-meta">
+                                    <span>状态：{{ item.get_status_display }}</span>
+                                    <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

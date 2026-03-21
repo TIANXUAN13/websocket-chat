@@ -1,0 +1,330 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>与 {{ other_user.username }} 的私聊</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322g">
+</head>
+<body class="room-page{% if embed_mode %} embed-chat-page{% endif %}">
+    {% if not embed_mode %}
+    <header class="room-topbar panel-card">
+        <div class="room-header-main">
+            <a href="{% url 'friends' %}" class="btn btn-secondary back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                返回好友列表
+            </a>
+            <div class="room-identity">
+                <div class="room-glyph room-avatar room-avatar-large">{{ other_profile.get_avatar_label }}</div>
+                <div class="room-title-block">
+                    <strong>{{ other_user.username }}</strong>
+                    <span>{{ other_profile.bio|default:"你们已经是好友，可以开始私聊了。" }}</span>
+                    <div class="room-stats-inline">
+                        <span class="pill pill-muted">好友 ID {{ other_profile.friend_id }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="status-cluster">
+            <a class="settings-trigger settings-link inbox-trigger" href="{% url 'inbox' %}" aria-label="消息中心">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M4 6h16v12H4z"/>
+                    <path d="M4 10l6.5 5L17 10"/>
+                </svg>
+                {% if inbox_badge_count|default:pending_friend_requests_count %}
+                    <span class="notification-badge">{{ inbox_badge_count|default:pending_friend_requests_count }}</span>
+                {% endif %}
+            </a>
+            <button class="settings-trigger" type="button" onclick="toggleDirectSettings()" aria-label="私聊设置">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
+                    <circle cx="12" cy="12" r="3.2"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+    {% endif %}
+
+    {% if not embed_mode %}
+    <div class="settings-overlay" id="direct-settings-overlay" onclick="toggleDirectSettings(false)"></div>
+    <aside class="room-settings-drawer panel-card" id="direct-settings-drawer">
+        <div class="drawer-head">
+            <div>
+                <strong>私聊设置</strong>
+                <span>历史消息会自动保存；清除只影响你这边的可见记录，不会删除对方那边。</span>
+            </div>
+            <button class="drawer-close" type="button" onclick="toggleDirectSettings(false)" aria-label="关闭私聊设置">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="stack">
+            <div class="quick-action-card stack">
+                <strong>历史记录状态</strong>
+                <p>{% if cleared_at %}你已在 {{ cleared_at|date:"Y-m-d H:i" }} 清理过一次自己这边的可见历史。{% else %}你这边还没有清理过私聊历史。{% endif %}</p>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_history">
+                    <button class="btn btn-danger" type="submit" onclick="return confirm('确定清除你这边看到的私聊历史吗？');">清除我看到的历史</button>
+                </form>
+            </div>
+            <div class="quick-action-card stack">
+                <strong>好友操作</strong>
+                <a class="btn btn-secondary" href="{% url 'user_profile' other_user.username %}">查看好友资料</a>
+                <form method="post" action="{% url 'remove_friend' other_user.username %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'friends' %}">
+                    <button class="btn btn-danger" type="submit" onclick="return confirm('确定删除这个好友吗？删除后将不能继续直接聊天。');">删除好友</button>
+                </form>
+            </div>
+        </div>
+    </aside>
+    {% endif %}
+
+    {% if messages %}
+        <div class="toast-container">
+            {% for message in messages %}
+                <div class="toast {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="{% if embed_mode %}embed-chat-layout{% else %}room-layout direct-chat-layout{% endif %}">
+        {% if not embed_mode %}
+        <aside class="user-panel panel-card">
+            <div class="panel-title">
+                <strong>聊天对象</strong>
+                <span class="pill pill-muted">已是好友</span>
+            </div>
+            <div class="direct-friend-card">
+                <div class="mini-avatar direct-friend-avatar">{{ other_profile.get_avatar_label }}</div>
+                <div class="stack compact-stack">
+                    <strong>{{ other_user.username }}</strong>
+                    <span>好友 ID：{{ other_profile.friend_id }}</span>
+                    <span>{{ other_profile.bio|default:"对方还没有填写个人介绍。" }}</span>
+                </div>
+            </div>
+        </aside>
+        {% endif %}
+
+        <section class="chat-main panel-card{% if embed_mode %} embed-chat-main{% endif %}">
+            <div class="chat-head">
+                <div>
+                    <strong>{% if embed_mode %}{{ other_user.username }}{% else %}私聊记录{% endif %}</strong>
+                    <span>{% if embed_mode %}{{ other_profile.bio|default:"你们已经是好友，可以直接聊天。" }}{% else %}这里只展示你当前还能看到的历史消息，新消息会持续自动保存。{% endif %}</span>
+                </div>
+                <span class="pill pill-muted" id="direct-status-text">连接中...</span>
+            </div>
+
+            <div class="chat-messages direct-message-list" id="direct-message-list">
+                {% if messages_list %}
+                    {% for item in messages_list %}
+                        <div class="message {% if item.sender == user %}mine{% else %}other{% endif %}">
+                            <div class="msg-shell">
+                                <div class="message-avatar">{{ item.sender.chat_profile.get_avatar_label }}</div>
+                                <div class="message-stack">
+                                    <div class="msg-head">
+                                        <div class="msg-user-wrap">
+                                            <div class="msg-user">{{ item.sender.username }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="message-bubble">
+                                        <div class="msg-text">{{ item.content }}</div>
+                                        <div class="msg-time">{{ item.created_at|date:"H:i" }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-chat">
+                        <div class="empty-chat-card">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                            <p>还没有私聊消息，发一句试试看。</p>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <form class="chat-input-area" method="post" id="direct-chat-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="send">
+                <input class="form-input" type="text" name="content" id="direct-message-input" placeholder="输入私聊内容，按 Enter 发送..." maxlength="2000" autocomplete="off">
+                <button class="btn btn-primary" type="submit" id="direct-send-btn">发送消息</button>
+            </form>
+        </section>
+    </main>
+
+    <script>
+        const directSettingsDrawer = document.getElementById('direct-settings-drawer');
+        const directSettingsOverlay = document.getElementById('direct-settings-overlay');
+        const directChatForm = document.getElementById('direct-chat-form');
+        const directMessageList = document.getElementById('direct-message-list');
+        const directMessageInput = document.getElementById('direct-message-input');
+        const directSendBtn = document.getElementById('direct-send-btn');
+        const directStatusText = document.getElementById('direct-status-text');
+        const currentUsername = '{{ user.username }}';
+        const otherUsername = {{ other_username_json }};
+        const csrfToken = '{{ csrf_token }}';
+        const markDirectReadUrl = '{% url "mark_direct_read" other_user.username %}';
+        const myAppearance = {{ chat_profile_payload_json }};
+        const otherAppearance = {{ other_profile_payload_json }};
+
+        function toggleDirectSettings(forceState) {
+            const shouldOpen = typeof forceState === 'boolean'
+                ? forceState
+                : !directSettingsDrawer.classList.contains('open');
+            directSettingsDrawer.classList.toggle('open', shouldOpen);
+            directSettingsOverlay.classList.toggle('open', shouldOpen);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function scrollDirectMessagesToBottom() {
+            directMessageList.scrollTop = directMessageList.scrollHeight;
+        }
+
+        function updateDirectStatus(connected) {
+            directStatusText.textContent = connected ? '实时已连接' : '连接已断开';
+            directStatusText.classList.toggle('pill-muted', true);
+        }
+
+        function applyAppearance(element, appearance) {
+            if (!appearance || !element.classList.contains('message')) {
+                return;
+            }
+
+            const bubble = element.querySelector('.message-bubble');
+            const avatar = element.querySelector('.message-avatar');
+            element.style.setProperty('--bubble-bg', appearance.bubble_bg);
+            element.style.setProperty('--bubble-color', appearance.bubble_text);
+            element.style.setProperty('--bubble-accent', appearance.bubble_accent);
+            element.style.setProperty('--bubble-nameplate-bg', appearance.nameplate_bg);
+            element.style.setProperty('--bubble-radius', appearance.radius);
+            element.style.setProperty('--bubble-shadow', appearance.shadow);
+            element.style.setProperty('--bubble-border', appearance.border);
+            element.style.setProperty('--bubble-backdrop', appearance.backdrop_filter);
+
+            if (bubble) {
+                bubble.style.background = appearance.bubble_bg;
+                bubble.style.color = appearance.bubble_text;
+                bubble.style.border = appearance.border;
+                bubble.style.borderRadius = appearance.radius;
+                bubble.style.boxShadow = appearance.shadow;
+                bubble.style.backdropFilter = appearance.backdrop_filter;
+            }
+
+            if (avatar) {
+                avatar.style.color = appearance.bubble_text;
+                avatar.style.background = appearance.bubble_bg;
+                avatar.style.border = appearance.border;
+                avatar.style.boxShadow = appearance.shadow;
+            }
+        }
+
+        function appendDirectMessage(data) {
+            const emptyChat = directMessageList.querySelector('.empty-chat');
+            if (emptyChat) {
+                emptyChat.remove();
+            }
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${data.user === currentUsername ? 'mine' : 'other'}`;
+
+            const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
+            const timeStr = timestamp.getHours().toString().padStart(2, '0') + ':' + timestamp.getMinutes().toString().padStart(2, '0');
+            msgDiv.innerHTML = `
+                <div class="msg-shell">
+                    <div class="message-avatar">${escapeHtml(data.avatar_label)}</div>
+                    <div class="message-stack">
+                        <div class="msg-head">
+                            <div class="msg-user-wrap">
+                                <div class="msg-user">${escapeHtml(data.user)}</div>
+                            </div>
+                        </div>
+                        <div class="message-bubble">
+                            <div class="msg-text">${escapeHtml(data.message)}</div>
+                            <div class="msg-time">${timeStr}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            applyAppearance(msgDiv, data.user === currentUsername ? myAppearance : (data.appearance || otherAppearance));
+            directMessageList.appendChild(msgDiv);
+            scrollDirectMessagesToBottom();
+        }
+
+        async function markDirectAsRead() {
+            try {
+                await fetch(markDirectReadUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                    },
+                    credentials: 'same-origin',
+                });
+            } catch (error) {
+                console.warn('同步私聊已读失败:', error);
+            }
+        }
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const directSocket = new WebSocket(protocol + '//' + window.location.host + '/ws/direct/' + encodeURIComponent(otherUsername) + '/');
+
+        directSocket.addEventListener('open', function() {
+            updateDirectStatus(true);
+            directMessageInput.focus();
+        });
+
+        directSocket.addEventListener('message', function(event) {
+            const data = JSON.parse(event.data);
+            if (data.type !== 'chat') {
+                return;
+            }
+            appendDirectMessage(data);
+            markDirectAsRead();
+        });
+
+        directSocket.addEventListener('close', function() {
+            updateDirectStatus(false);
+        });
+
+        directChatForm.addEventListener('submit', function(event) {
+            const message = directMessageInput.value.trim();
+            if (!message) {
+                event.preventDefault();
+                return;
+            }
+
+            if (directSocket.readyState === WebSocket.OPEN) {
+                event.preventDefault();
+                directSocket.send(JSON.stringify({
+                    type: 'chat',
+                    message: message,
+                }));
+                directMessageInput.value = '';
+                directMessageInput.focus();
+            }
+        });
+
+        Array.from(directMessageList.querySelectorAll('.message')).forEach(function(messageElement) {
+            const isMine = messageElement.classList.contains('mine');
+            applyAppearance(messageElement, isMine ? myAppearance : otherAppearance);
+        });
+
+        scrollDirectMessagesToBottom();
+        markDirectAsRead();
+    </script>
+</body>
+</html>

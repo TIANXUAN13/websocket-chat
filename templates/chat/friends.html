@@ -1,0 +1,139 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>好友</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322j">
+</head>
+<body class="lobby-page">
+    <header class="topbar panel-card">
+        <div class="topbar-group">
+            <a href="{% url 'chat_index' %}" class="btn btn-secondary back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                返回大厅
+            </a>
+            <div class="brand-title">
+                <strong>好友</strong>
+                <span>点一下名字就直接开始聊天。</span>
+            </div>
+        </div>
+        <div class="topbar-group">
+            <a href="{% url 'add_friend' %}" class="btn btn-secondary">添加好友</a>
+            <a href="{% url 'profile_settings' %}" class="settings-trigger settings-link" aria-label="个人设置">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
+                    <circle cx="12" cy="12" r="3.2"/>
+                </svg>
+            </a>
+            <a href="{% url 'logout' %}" class="btn btn-secondary">退出登录</a>
+        </div>
+    </header>
+
+    {% if messages %}
+        <div class="toast-container">
+            {% for message in messages %}
+                <div class="toast {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="hub-layout">
+        {% include 'chat/_module_rail.html' with active_section='friends' include_lobby_entry=True %}
+
+        <aside class="sidebar-card panel-card room-browser-card friend-sidebar">
+            <div class="sidebar-heading">
+                <strong>好友列表</strong>
+                <span>只保留名字入口，点击整项直接进私聊。</span>
+            </div>
+            <div class="room-list friend-name-list">
+                {% if friends %}
+                    {% for item in friends %}
+                        <a href="{% url 'inbox' %}?thread_type=direct&target={{ item.friend.username|urlencode }}" class="friend-list-item friend-list-item-simple">
+                            <div class="mini-avatar">{{ item.friend.chat_profile.get_avatar_label|default:item.friend.username|slice:":2" }}</div>
+                            <strong class="room-title">{{ item.friend.username }}</strong>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="quick-action-card">
+                        <strong>你还没有好友</strong>
+                        <p>先去添加好友页发起申请吧。</p>
+                    </div>
+                {% endif %}
+            </div>
+        </aside>
+
+        <section class="content-card panel-card">
+            <div class="content-hero">
+                <span class="section-label" id="friends-label">好友时间</span>
+                <h1 id="friends-title">找个人，随便聊两句。</h1>
+                <p id="friends-desc">左边是已经加上的好友，不用先看资料，想聊就直接点进去。</p>
+
+                <div class="hero-grid">
+                    <div class="hero-card">
+                        <strong id="friends-card-1-title">轻松开口</strong>
+                        <span id="friends-card-1-desc">有时候一句“在吗”，就够把聊天重新接起来了。</span>
+                    </div>
+                    <div class="hero-card">
+                        <strong id="friends-card-2-title">直接一点</strong>
+                        <span id="friends-card-2-desc">好友页现在只做一件事，让你更快找到要聊的人。</span>
+                    </div>
+                    <div class="hero-card">
+                        <strong id="friends-card-3-title">慢慢聊</strong>
+                        <span id="friends-card-3-desc">不管是问候、闲聊还是继续昨天的话题，都可以从这里开始。</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const friendVariants = [
+            {
+                label: '好友时间',
+                title: '找个人，随便聊两句。',
+                desc: '左边是已经加上的好友，不用先看资料，想聊就直接点进去。',
+                cards: [
+                    { title: '轻松开口', desc: '有时候一句“在吗”，就够把聊天重新接起来了。' },
+                    { title: '直接一点', desc: '好友页现在只做一件事，让你更快找到要聊的人。' },
+                    { title: '慢慢聊', desc: '不管是问候、闲聊还是继续昨天的话题，都可以从这里开始。' }
+                ]
+            },
+            {
+                label: '今天想聊谁',
+                title: '左边的人，可能刚好也在等你。',
+                desc: '不用再绕去资料页了，看到名字顺手点开，聊天就能开始。',
+                cards: [
+                    { title: '一句问候', desc: '简单一点反而最好开场，比如“最近怎么样”。' },
+                    { title: '继续话题', desc: '昨天没说完的内容，今天接上也完全来得及。' },
+                    { title: '别太正式', desc: '真正舒服的私聊，往往都不是从正经寒暄开始的。' }
+                ]
+            },
+            {
+                label: '私聊一下',
+                title: '把想说的话，交给一个具体的人。',
+                desc: '好友列表现在更像通讯录了，点名字就走，不用再多想一步。',
+                cards: [
+                    { title: '先开个头', desc: '就算只发一个表情，也比一直停在列表里更接近聊天。' },
+                    { title: '看到就点', desc: '流程越短，聊天越自然，所以这里把入口收得很直接。' },
+                    { title: '说点最近的事', desc: '今天发生的小事，往往最适合拿来重新打开对话。' }
+                ]
+            }
+        ];
+
+        const selectedFriendVariant = friendVariants[Math.floor(Math.random() * friendVariants.length)];
+        document.getElementById('friends-label').textContent = selectedFriendVariant.label;
+        document.getElementById('friends-title').textContent = selectedFriendVariant.title;
+        document.getElementById('friends-desc').textContent = selectedFriendVariant.desc;
+        document.getElementById('friends-card-1-title').textContent = selectedFriendVariant.cards[0].title;
+        document.getElementById('friends-card-1-desc').textContent = selectedFriendVariant.cards[0].desc;
+        document.getElementById('friends-card-2-title').textContent = selectedFriendVariant.cards[1].title;
+        document.getElementById('friends-card-2-desc').textContent = selectedFriendVariant.cards[1].desc;
+        document.getElementById('friends-card-3-title').textContent = selectedFriendVariant.cards[2].title;
+        document.getElementById('friends-card-3-desc').textContent = selectedFriendVariant.cards[2].desc;
+    </script>
+</body>
+</html>

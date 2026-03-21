@@ -1,0 +1,66 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创建房间</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322i">
+</head>
+<body class="lobby-page">
+    <header class="topbar panel-card">
+        <div class="topbar-group">
+            <a href="{% url 'chat_index' %}" class="btn btn-secondary back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                返回大厅
+            </a>
+            <div class="brand-title">
+                <strong>创建房间</strong>
+                <span>从这里正式创建新群聊。</span>
+            </div>
+        </div>
+    </header>
+
+    {% if messages %}
+        <div class="toast-container">
+            {% for message in messages %}
+                <div class="toast {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="social-layout">
+        {% include 'chat/_module_rail.html' with active_section='lobby' include_lobby_entry=False %}
+        <section class="content-card panel-card narrow-content">
+            <div class="content-hero">
+                <span class="section-label">新建群聊</span>
+                <h1>给房间起个清楚一点的名字</h1>
+                <p>创建成功后会直接进入房间。</p>
+            </div>
+
+            <form class="settings-section profile-settings-form" method="post">
+                {% csrf_token %}
+                <div class="stack">
+                    <label class="field-label" for="room_name">房间名称</label>
+                    <input class="form-input" id="room_name" type="text" name="room_name" placeholder="例如：产品讨论 / 深夜摸鱼" required>
+                </div>
+                <div class="stack">
+                    <label class="field-label" for="room_avatar">群头像</label>
+                    <select class="form-input" id="room_avatar" name="room_avatar">
+                        {% for avatar in room_avatars %}
+                            <option value="{{ avatar }}">{{ avatar }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="stack">
+                    <label class="field-label" for="room_description">群简介</label>
+                    <input class="form-input" id="room_description" type="text" name="room_description" maxlength="120" placeholder="一句话介绍这个房间">
+                </div>
+                <button class="btn btn-primary" type="submit">创建房间</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

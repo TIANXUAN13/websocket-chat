@@ -5,9 +5,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ room_name }} - 聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322n">
 </head>
-<body class="room-page">
+<body class="room-page{% if embed_mode %} embed-chat-page{% endif %}">
+    {% if not embed_mode %}
     <header class="room-topbar panel-card">
         <div class="room-header-main">
             <a href="{% url 'chat_index' %}" class="btn btn-secondary back-link">
@@ -32,6 +33,21 @@
             </div>
         </div>
         <div class="status-cluster">
+            <a class="settings-trigger settings-link inbox-trigger" href="{% url 'inbox' %}" aria-label="消息中心">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M4 6h16v12H4z"/>
+                    <path d="M4 10l6.5 5L17 10"/>
+                </svg>
+                {% if inbox_badge_count|default:pending_friend_requests_count %}
+                    <span class="notification-badge">{{ inbox_badge_count|default:pending_friend_requests_count }}</span>
+                {% endif %}
+            </a>
+            <a class="settings-trigger settings-link" href="{% url 'profile_settings' %}" aria-label="个人设置">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M12 3a1 1 0 011 1v1.08a7 7 0 015.92 5.92H20a1 1 0 110 2h-1.08A7 7 0 0113 18.92V20a1 1 0 11-2 0v-1.08A7 7 0 015.08 13H4a1 1 0 110-2h1.08A7 7 0 0111 5.08V4a1 1 0 011-1z"/>
+                    <circle cx="12" cy="12" r="3.2"/>
+                </svg>
+            </a>
             {% if is_owner %}
                 <button class="settings-trigger" type="button" onclick="toggleRoomSettings()" aria-label="房间设置">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -44,6 +60,7 @@
             <span id="status-text">连接中</span>
         </div>
     </header>
+    {% endif %}
 
     {% if is_owner %}
         <div class="settings-overlay" id="settings-overlay" onclick="toggleRoomSettings(false)"></div>
@@ -62,6 +79,7 @@
 
             <form class="room-settings-form" method="post">
                 {% csrf_token %}
+                <input type="hidden" name="action" value="room_settings">
                 <div class="stack">
                     <label class="field-label" for="room_avatar">群头像</label>
                     <select class="form-input" id="room_avatar" name="room_avatar">
@@ -81,41 +99,60 @@
                 <button class="btn btn-secondary" type="submit">保存资料</button>
             </form>
 
+            <div class="settings-section">
+                <div class="settings-section-head">
+                    <strong>群成员管理</strong>
+                    <span>这里会显示全部群成员，在线状态会实时更新，房主可以直接移出在线成员。</span>
+                </div>
+                <div class="panel-title">
+                    <strong>群成员</strong>
+                    <span class="pill pill-muted" id="member-count">{{ room_total_members }} 人</span>
+                </div>
+                <div class="user-list" id="user-list">
+                    <div class="user-item">
+                        <div class="user-item-left">
+                            <div class="mini-avatar">{{ chat_profile.get_avatar_label }}</div>
+                            <span class="user-name-text">{{ user.username }}</span>
+                        </div>
+                        <span class="pill pill-owner">你</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="drawer-actions">
                 <button class="btn btn-danger" type="button" onclick="deleteRoom()">删除房间</button>
             </div>
         </aside>
     {% endif %}
 
-    <main class="room-layout">
-        <aside class="user-panel panel-card">
-            <div class="panel-title">
-                <strong>在线成员</strong>
-                <span class="pill pill-muted" id="member-count">1 人</span>
-            </div>
-            <div class="user-list" id="user-list">
-                <div class="user-item">
-                    <div class="user-item-left">
-                        <div class="mini-avatar">{{ user.username.0|upper }}</div>
-                        <span class="user-name-text">{{ user.username }}</span>
+    <main class="{% if embed_mode %}embed-chat-layout{% else %}room-layout{% endif %}">
+        <section class="chat-main panel-card{% if embed_mode %} embed-chat-main{% endif %}">
+            <div class="chat-head">
+                {% if embed_mode %}
+                <div class="embed-room-toolbar">
+                    <div class="room-stats-inline">
+                        <span class="pill pill-muted">总人数 <strong id="total-member-count">{{ room_total_members }}</strong></span>
+                        <span class="pill pill-muted">在线人数 <strong id="online-member-count">1</strong></span>
                     </div>
                     {% if is_owner %}
-                        <span class="pill pill-owner">你</span>
+                        <button class="settings-trigger" type="button" onclick="toggleRoomSettings()" aria-label="群聊设置">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
+                                <circle cx="12" cy="12" r="3.2"/>
+                            </svg>
+                        </button>
                     {% endif %}
                 </div>
-            </div>
-        </aside>
-
-        <section class="chat-main panel-card">
-            <div class="chat-head">
+                {% else %}
                 <div>
                     <strong>房间对话</strong>
                     <span>进入后会自动同步欢迎消息与最近聊天记录。</span>
                 </div>
                 <span class="pill pill-muted">WebSocket 实时连接</span>
+                {% endif %}
             </div>
 
-            <div class="load-more-wrap" id="load-more-container">
+            <div class="load-more-wrap" id="load-more-container" hidden>
                 <button class="load-more-btn" id="load-more-btn" style="display:none;">加载更多历史消息</button>
             </div>
 
@@ -150,29 +187,45 @@
         const onlineMemberCount = document.getElementById('online-member-count');
         const settingsDrawer = document.getElementById('room-settings-drawer');
         const settingsOverlay = document.getElementById('settings-overlay');
-
         const username = '{{ user.username }}';
+        const myAppearance = {{ chat_profile_payload_json }};
+        const csrfToken = '{{ csrf_token }}';
+        const markRoomReadUrl = '{% url "mark_room_read" room_name %}';
+        const userProfileUrlTemplate = '{% url "user_profile" "__username__" %}';
+        let baseRoomMembers = {{ room_members_json }};
+        const isRemovedFromRoom = {{ is_removed_from_room|yesno:"true,false" }};
         let historyOffset = 0;
         let isLoadingHistory = false;
         let hasMoreHistory = false;
+        let hasInitialHistoryLoaded = false;
+        let currentOnlineUsers = {};
+        let hasShownRemovedAlert = false;
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = protocol + '//' + window.location.host + '/ws/chat/' + roomName + '/';
         const chatSocket = new WebSocket(wsUrl);
         const loadMoreBtn = document.getElementById('load-more-btn');
+        const loadMoreContainer = document.getElementById('load-more-container');
 
         chatSocket.onopen = function() {
-            messageInput.disabled = false;
-            sendBtn.disabled = false;
-            statusDot.classList.add('connected');
-            statusText.textContent = '已连接';
-            messageInput.focus();
+            setComposerEnabled(!isRemovedFromRoom);
+            if (statusDot) {
+                statusDot.classList.add('connected');
+            }
+            if (statusText) {
+                statusText.textContent = isRemovedFromRoom ? '只读查看' : '已连接';
+            }
+            if (!isRemovedFromRoom) {
+                messageInput.focus();
+            }
 
-            chatSocket.send(JSON.stringify({
-                'type': 'join',
-                'user': username,
-                'is_owner': isOwner
-            }));
+            if (!isRemovedFromRoom) {
+                chatSocket.send(JSON.stringify({
+                    'type': 'join',
+                    'user': username,
+                    'is_owner': isOwner
+                }));
+            }
         };
 
         chatSocket.onmessage = function(e) {
@@ -188,9 +241,18 @@
                 return;
             }
 
+            if (data.type === 'removed') {
+                handleRemovedState(data.message);
+                return;
+            }
+
+            if (data.type === 'member_removed') {
+                handleMemberRemoved(data.username);
+                return;
+            }
+
             if (data.type === 'kick') {
-                alert('您已被房主踢出房间');
-                window.location.href = '/chat/';
+                handleRemovedState('你已被房主移出该群聊，不可再发送消息。');
                 return;
             }
 
@@ -201,7 +263,43 @@
             }
 
             appendMessage(data);
+            if (data.type === 'chat') {
+                markRoomAsRead();
+            }
         };
+
+        async function markRoomAsRead() {
+            try {
+                await fetch(markRoomReadUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                    },
+                    credentials: 'same-origin',
+                });
+            } catch (error) {
+                console.warn('同步群聊已读失败:', error);
+            }
+        }
+
+        function setComposerEnabled(enabled) {
+            messageInput.disabled = !enabled;
+            sendBtn.disabled = !enabled;
+        }
+
+        function handleRemovedState(message) {
+            setComposerEnabled(false);
+            if (statusDot) {
+                statusDot.classList.remove('connected');
+            }
+            if (statusText) {
+                statusText.textContent = '已被移出';
+            }
+            if (!hasShownRemovedAlert) {
+                hasShownRemovedAlert = true;
+                window.alert(message || '你已被移出该群聊，不可再发送消息。');
+            }
+        }
 
         function appendMessage(data, prepend = false, fallbackTime = null) {
             const emptyChat = messagesDiv.querySelector('.empty-chat');
@@ -218,6 +316,7 @@
             else msgClass += ' other';
 
             msgDiv.className = msgClass;
+            applyAppearance(msgDiv, data.appearance || (data.user === username ? myAppearance : null));
 
             const date = data.timestamp ? new Date(data.timestamp) : fallbackTime || new Date();
             const timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
@@ -226,9 +325,27 @@
             if (data.type === 'system' || data.type === 'kick' || data.type === 'delete_room') {
                 html = `<span>${escapeHtml(data.message)}</span>`;
             } else {
-                html = `<div class="msg-user">${escapeHtml(data.user)}</div>`;
+                const avatarLabel = escapeHtml(data.avatar_label || getFallbackAvatar(data.user));
+                html = `<div class="msg-shell">`;
+                if (data.friend_id && data.user !== username) {
+                    html += `<button class="message-avatar avatar-action" type="button" data-friend-id="${escapeHtml(data.friend_id)}" data-friend-name="${escapeHtml(data.user)}">${avatarLabel}</button>`;
+                } else {
+                    html += `<div class="message-avatar">${avatarLabel}</div>`;
+                }
+                html += `<div class="message-stack">`;
+                html += `<div class="msg-head">`;
+                html += `<div class="msg-user-wrap">`;
+                html += `<div class="msg-user">${escapeHtml(data.user)}</div>`;
+                if (data.location) {
+                    html += `<div class="msg-location">${escapeHtml(data.location)}</div>`;
+                }
+                html += `</div>`;
+                html += `</div>`;
+                html += `<div class="message-bubble">`;
                 html += `<div class="msg-text">${escapeHtml(data.message)}</div>`;
                 html += `<div class="msg-time">${timeStr}</div>`;
+                html += `</div>`;
+                html += `</div>`;
             }
             msgDiv.innerHTML = html;
 
@@ -240,45 +357,222 @@
             }
         }
 
+        function applyAppearance(element, appearance) {
+            if (!appearance || !element.classList.contains('message') || element.classList.contains('system') || element.classList.contains('kick') || element.classList.contains('delete-room')) {
+                return;
+            }
+
+            const bubble = element.querySelector('.message-bubble');
+            const avatar = element.querySelector('.message-avatar');
+            const locationTag = element.querySelector('.msg-location');
+            element.style.setProperty('--bubble-bg', appearance.bubble_bg);
+            element.style.setProperty('--bubble-color', appearance.bubble_text);
+            element.style.setProperty('--bubble-accent', appearance.bubble_accent);
+            element.style.setProperty('--bubble-nameplate-bg', appearance.nameplate_bg);
+            element.style.setProperty('--bubble-radius', appearance.radius);
+            element.style.setProperty('--bubble-shadow', appearance.shadow);
+            element.style.setProperty('--bubble-border', appearance.border);
+            element.style.setProperty('--bubble-backdrop', appearance.backdrop_filter);
+
+            if (bubble) {
+                bubble.style.background = appearance.bubble_bg;
+                bubble.style.color = appearance.bubble_text;
+                bubble.style.border = appearance.border;
+                bubble.style.borderRadius = appearance.radius;
+                bubble.style.boxShadow = appearance.shadow;
+                bubble.style.backdropFilter = appearance.backdrop_filter;
+            }
+
+            if (avatar) {
+                avatar.style.color = appearance.bubble_text;
+                avatar.style.background = appearance.bubble_bg;
+                avatar.style.border = appearance.border;
+                avatar.style.boxShadow = appearance.shadow;
+            }
+
+            if (locationTag) {
+                locationTag.style.background = 'rgba(104, 74, 52, 0.08)';
+                locationTag.style.color = 'var(--text-body)';
+                locationTag.style.border = '1px solid rgba(104, 74, 52, 0.1)';
+            }
+        }
+
+        function openUserProfile(name) {
+            const targetUrl = getUserProfileUrl(name);
+            if (window.top && window.top !== window.self) {
+                window.top.location.href = targetUrl;
+                return;
+            }
+            window.location.href = targetUrl;
+        }
+
+        function buildMemberEntries(users) {
+            const onlineMap = users || {};
+            const merged = new Map();
+
+            baseRoomMembers.forEach((member) => {
+                merged.set(member.username, {
+                    username: member.username,
+                    avatar_label: member.avatar_label,
+                    friend_id: member.friend_id,
+                    is_owner: !!member.is_owner,
+                    is_self: !!member.is_self,
+                    is_online: !!onlineMap[member.username],
+                });
+            });
+
+            Object.entries(onlineMap).forEach(([name, meta]) => {
+                const previous = merged.get(name) || {
+                    username: name,
+                    avatar_label: getFallbackAvatar(name),
+                    friend_id: '',
+                    is_owner: false,
+                    is_self: name === username,
+                    is_online: true,
+                };
+                merged.set(name, {
+                    ...previous,
+                    avatar_label: meta.avatar_label || previous.avatar_label,
+                    friend_id: meta.friend_id || previous.friend_id,
+                    is_owner: !!meta.is_owner || previous.is_owner,
+                    is_self: previous.is_self || name === username,
+                    is_online: true,
+                });
+            });
+
+            return Array.from(merged.values()).sort((left, right) => {
+                const leftRank = left.is_owner ? 0 : (left.is_self ? 1 : 2);
+                const rightRank = right.is_owner ? 0 : (right.is_self ? 1 : 2);
+                if (leftRank !== rightRank) return leftRank - rightRank;
+                return left.username.localeCompare(right.username, 'zh-CN');
+            });
+        }
+
         function updateUserList(users) {
-            const entries = Object.entries(users);
+            if (!userList || !memberCount || !onlineMemberCount) {
+                return;
+            }
+            currentOnlineUsers = users || {};
+            const entries = buildMemberEntries(currentOnlineUsers);
+            const onlineCount = Object.keys(currentOnlineUsers).length;
             userList.innerHTML = '';
             memberCount.textContent = `${entries.length} 人`;
-            onlineMemberCount.textContent = `${entries.length}`;
+            onlineMemberCount.textContent = `${onlineCount}`;
 
-            for (const [user, isOwnerUser] of entries) {
+            for (const meta of entries) {
+                const user = meta.username;
+                const isOwnerUser = !!meta.is_owner;
+                const avatarLabel = escapeHtml((meta.avatar_label || getFallbackAvatar(user)));
                 const userItem = document.createElement('div');
                 userItem.className = 'user-item';
 
                 let actionHtml = '';
                 if (user === username) {
                     actionHtml = isOwnerUser ? '<span class="pill pill-owner">你</span>' : '<span class="pill pill-muted">你</span>';
-                } else if (isOwner) {
+                } else if (isOwner && meta.is_online) {
                     actionHtml = `<button class="kick-btn" onclick="kickUser('${escapeHtml(user)}')">移出</button>`;
                 } else if (isOwnerUser) {
                     actionHtml = '<span class="pill pill-owner">房主</span>';
+                } else if (meta.is_online) {
+                    actionHtml = '<span class="pill pill-muted">在线</span>';
+                } else {
+                    actionHtml = '<span class="pill pill-muted">离线</span>';
                 }
 
                 userItem.innerHTML = `
                     <div class="user-item-left">
-                        <div class="mini-avatar">${escapeHtml(user[0].toUpperCase())}</div>
+                        ${meta.friend_id && user !== username
+                            ? `<button class="mini-avatar avatar-action" type="button" data-friend-id="${escapeHtml(meta.friend_id)}" data-friend-name="${escapeHtml(user)}">${avatarLabel}</button>`
+                            : `<div class="mini-avatar">${avatarLabel}</div>`}
                         <span class="user-name-text">${escapeHtml(user)}</span>
                     </div>
                     ${actionHtml}
                 `;
+                const miniAvatar = userItem.querySelector('.mini-avatar, .avatar-action');
+                const themeSource = user === username ? myAppearance : null;
+                if (miniAvatar && themeSource) {
+                    miniAvatar.style.background = themeSource.bubble_bg;
+                    miniAvatar.style.color = themeSource.bubble_text;
+                    miniAvatar.style.border = themeSource.border;
+                }
                 userList.appendChild(userItem);
             }
+        }
+
+        function handleMemberRemoved(removedUsername) {
+            if (!removedUsername) return;
+            baseRoomMembers = baseRoomMembers.filter((member) => member.username !== removedUsername);
+            if (currentOnlineUsers[removedUsername]) {
+                delete currentOnlineUsers[removedUsername];
+            }
+            updateUserList(currentOnlineUsers);
+        }
+
+        function getFallbackAvatar(user) {
+            const normalized = (user || '').trim();
+            if (!normalized) return '用户';
+            if (/[\u4e00-\u9fff]/.test(normalized)) return normalized.slice(0, 2);
+            return normalized.slice(0, 2).toUpperCase();
+        }
+
+        function getUserProfileUrl(name) {
+            return userProfileUrlTemplate.replace('__username__', encodeURIComponent(name));
+        }
+
+        async function syncPreciseLocation(position) {
+            try {
+                await fetch('{% url "update_precise_location" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                    }),
+                });
+            } catch (error) {
+                console.warn('同步精确位置失败:', error);
+            }
+        }
+
+        function requestPreciseLocation() {
+            if (!navigator.geolocation) return;
+            navigator.geolocation.getCurrentPosition(
+                syncPreciseLocation,
+                () => {},
+                {
+                    enableHighAccuracy: true,
+                    timeout: 8000,
+                    maximumAge: 600000,
+                }
+            );
         }
 
         function handleHistory(data) {
             const messages = data.messages || [];
 
             if (messages.length > 0) {
+                const previousScrollHeight = messagesDiv.scrollHeight;
+                const previousScrollTop = messagesDiv.scrollTop;
                 messages.forEach(msg => appendMessage(msg, true));
                 historyOffset += messages.length;
                 hasMoreHistory = data.has_more;
                 loadMoreBtn.style.display = hasMoreHistory ? 'inline-flex' : 'none';
+                loadMoreContainer.hidden = !hasMoreHistory;
+
+                if (!hasInitialHistoryLoaded) {
+                    requestAnimationFrame(() => {
+                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    });
+                } else {
+                    const nextScrollHeight = messagesDiv.scrollHeight;
+                    messagesDiv.scrollTop = nextScrollHeight - previousScrollHeight + previousScrollTop;
+                }
             }
+            hasInitialHistoryLoaded = true;
         }
 
         function loadMoreHistory() {
@@ -297,6 +591,7 @@
                 isLoadingHistory = false;
                 loadMoreBtn.textContent = '加载更多历史消息';
                 loadMoreBtn.disabled = false;
+                loadMoreContainer.hidden = !hasMoreHistory;
             }, 1000);
         }
 
@@ -331,13 +626,20 @@
         chatSocket.onclose = function() {
             messageInput.disabled = true;
             sendBtn.disabled = true;
-            statusDot.classList.remove('connected');
-            statusText.textContent = '已断开';
+            if (statusDot) {
+                statusDot.classList.remove('connected');
+            }
+            if (statusText) {
+                statusText.textContent = '已断开';
+            }
             appendMessage({ type: 'system', message: '连接已断开，请刷新页面重试。' });
         };
 
         function sendMessage() {
             const message = messageInput.value.trim();
+            if (messageInput.disabled) {
+                return;
+            }
             if (message && chatSocket.readyState === WebSocket.OPEN) {
                 chatSocket.send(JSON.stringify({
                     'type': 'chat',
@@ -361,6 +663,13 @@
         sendBtn.addEventListener('click', sendMessage);
         loadMoreBtn.addEventListener('click', loadMoreHistory);
 
+        document.addEventListener('click', function(event) {
+            const actionTarget = event.target.closest('.avatar-action');
+            if (!actionTarget) return;
+            const friendName = actionTarget.dataset.friendName || '这位用户';
+            openUserProfile(friendName);
+        });
+
         messagesDiv.addEventListener('scroll', function() {
             if (messagesDiv.scrollTop < 50 && hasMoreHistory && !isLoadingHistory) {
                 loadMoreHistory();
@@ -375,6 +684,13 @@
                 }));
             }
         });
+
+        requestPreciseLocation();
+        markRoomAsRead();
+        updateUserList(currentOnlineUsers);
+        if (isRemovedFromRoom) {
+            handleRemovedState('你已被移出该群聊，仅可查看历史消息，不能再发送消息。');
+        }
     </script>
 </body>
 </html>

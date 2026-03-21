@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322m">
 </head>
 <body class="lobby-page">
     <header class="topbar panel-card">
@@ -22,18 +22,49 @@
         </div>
         <div class="topbar-group">
             <div class="user-chip">
-                <div class="avatar">{{ user.username.0|upper }}</div>
+                <div class="avatar">{{ user.chat_profile.get_avatar_label|default:user.username|slice:":2" }}</div>
                 <div class="brand-title">
                     <strong>{{ user.username }}</strong>
                     <span>{% if user.is_superuser %}今天也来看看大家聊得怎么样{% else %}欢迎回来，挑个房间坐坐吧{% endif %}</span>
                 </div>
             </div>
+            <button class="settings-trigger" type="button" id="quick-action-trigger" aria-label="快速新建">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+            </button>
+            <a href="{% url 'inbox' %}" class="settings-trigger settings-link inbox-trigger" aria-label="申请与通知">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M4 6h16v12H4z"/>
+                    <path d="M4 10l6.5 5L17 10"/>
+                </svg>
+                {% if inbox_badge_count %}
+                    <span class="notification-badge">{{ inbox_badge_count }}</span>
+                {% endif %}
+            </a>
+            <a href="{% url 'profile_settings' %}" class="settings-trigger settings-link" aria-label="个人设置">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
+                    <circle cx="12" cy="12" r="3.2"/>
+                </svg>
+            </a>
             {% if user.is_superuser %}
                 <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary">管理后台</a>
             {% endif %}
             <a href="{% url 'logout' %}" class="btn btn-secondary">退出登录</a>
         </div>
     </header>
+
+    <div class="quick-action-menu panel-card" id="quick-action-menu" hidden>
+        <a href="{% url 'create_room' %}" class="quick-action-menu-item">
+            <strong>创建房间</strong>
+            <span>跳到独立页面完善群聊信息</span>
+        </a>
+        <a href="{% url 'add_friend' %}" class="quick-action-menu-item">
+            <strong>添加好友</strong>
+            <span>跳到独立页面输入好友 ID</span>
+        </a>
+    </div>
 
     {% if messages %}
         <div class="toast-container">
@@ -43,95 +74,157 @@
         </div>
     {% endif %}
 
-    <main class="lobby-layout">
-        <aside class="sidebar-card panel-card">
-            <div class="sidebar-heading">
-                <strong>房间列表</strong>
-                <span>新建房间，或者直接进入。</span>
-            </div>
-
-            <form class="create-room-card stack" method="post" action="{% url 'chat_index' %}">
-                {% csrf_token %}
-                <label class="field-label" for="room_name">新建房间</label>
-                <input class="form-input" id="room_name" type="text" name="room_name" placeholder="例如：产品讨论 / 深夜摸鱼" required>
-                <div class="stack">
-                    <label class="field-label" for="room_avatar">群头像</label>
-                    <select class="form-input" id="room_avatar" name="room_avatar">
-                        {% for avatar in room_avatars %}
-                            <option value="{{ avatar }}">{{ avatar }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="stack">
-                    <label class="field-label" for="room_description">群简介</label>
-                    <input class="form-input" id="room_description" type="text" name="room_description" placeholder="一句话介绍这个房间" maxlength="120">
-                </div>
-                <button class="btn btn-primary" type="submit">创建房间</button>
-            </form>
-
-            <div class="room-search-card">
-                <label class="field-label" for="room-search">搜索房间</label>
-                <input class="form-input" id="room-search" type="text" placeholder="输入房间名搜索">
-            </div>
-
-            <div class="room-list" id="room-list">
-                {% if rooms %}
-                    {% for room in rooms %}
-                        <div class="room-card" data-room-name="{{ room.name|lower }}" data-room-description="{{ room.description|lower }}">
-                            <a href="{% url 'chat_room' room.name %}" class="room-card-main">
-                                <div class="room-glyph room-avatar">{{ room.avatar }}</div>
-                                <div>
-                                    <span class="room-title">{{ room.name }}</span>
-                                    <div class="room-summary">{{ room.description }}</div>
-                                    <div class="room-meta">
-                                        <span>{{ room.total_members }} 人</span>
-                                        <span>{% if room.created_by %}创建者：{{ room.created_by.username }}{% else %}系统房间{% endif %}</span>
-                                        {% if room.created_by == user %}
-                                            <span class="pill pill-owner">房主</span>
-                                        {% endif %}
-                                    </div>
+    <main class="hub-layout">
+        {% include 'chat/_module_rail.html' with active_section='lobby' include_lobby_entry=True use_buttons=True %}
+        <aside class="sidebar-card panel-card room-browser-card panel-switch active" data-panel="lobby">
+            <div class="room-list conversation-list">
+                {% if conversation_threads %}
+                    {% for item in conversation_threads %}
+                        <button
+                            type="button"
+                            class="thread-list-item unified-thread-item{% if active_thread and active_thread.type == item.type and active_thread.name == item.name %} active{% endif %}"
+                            data-thread-url="{{ item.embed_url }}"
+                            data-thread-name="{{ item.name }}"
+                            data-thread-type="{{ item.type }}"
+                            data-thread-target="{{ item.name }}"
+                        >
+                            <div class="thread-main">
+                                <div class="thread-topline">
+                                    <strong class="room-title">{{ item.name }}</strong>
+                                    {% if item.unread_count > 0 %}
+                                        <span class="thread-count">{{ item.unread_count }}</span>
+                                    {% endif %}
                                 </div>
-                            </a>
-                            <div class="room-actions">
-                                <a href="{% url 'chat_room' room.name %}" class="btn btn-secondary">进入</a>
-                                {% if room.created_by == user %}
-                                    <form method="post" action="{% url 'delete_room' room.name %}" onsubmit="return confirm('确定删除这个房间吗？');">
-                                        {% csrf_token %}
-                                        <button class="link-ghost" type="submit">删除</button>
-                                    </form>
-                                {% endif %}
+                                <div class="room-meta">
+                                    <span>{% if item.type == 'room' %}群聊{% else %}私聊{% endif %}</span>
+                                    <span>{{ item.last_message_at|date:"m-d H:i" }}</span>
+                                </div>
+                                <div class="thread-preview">{{ item.last_message_preview }}</div>
                             </div>
-                        </div>
+                        </button>
                     {% endfor %}
                 {% else %}
-                    <div class="create-room-card">
-                        <strong class="room-title">还没有房间</strong>
-                        <div class="room-meta">
-                            <span>先新建一个房间吧。</span>
-                        </div>
+                    <div class="quick-action-card">
+                        <strong>还没有会话</strong>
+                        <p>进一个群聊发言，或者和好友开始聊天后，这里就会出现在消息中心。</p>
                     </div>
                 {% endif %}
             </div>
         </aside>
 
-        <section class="content-card panel-card">
+        <aside class="sidebar-card panel-card room-browser-card panel-switch" data-panel="friends" hidden>
+            <div class="sidebar-heading">
+                <strong>好友列表</strong>
+                <span>这里只保留联系人，点击名字直接进入私聊。</span>
+            </div>
+            <div class="room-list friend-name-list">
+                {% if friends %}
+                    {% for item in friends %}
+                        <a href="{% url 'chat_index' %}?thread_type=direct&target={{ item.friend.username|urlencode }}" class="friend-list-item friend-list-item-simple">
+                            <div class="mini-avatar">{{ item.friend.chat_profile.get_avatar_label|default:item.friend.username|slice:":2" }}</div>
+                            <strong class="room-title">{{ item.friend.username }}</strong>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="quick-action-card">
+                        <strong>还没有好友</strong>
+                        <p>你可以在右上角 `+` 添加好友，或者在群聊里点别人的头像开始认识。</p>
+                    </div>
+                {% endif %}
+            </div>
+        </aside>
+
+        <aside class="sidebar-card panel-card room-browser-card panel-switch" data-panel="moments" hidden>
+            <div class="sidebar-heading">
+                <strong>朋友圈预留</strong>
+                <span>这块先作为动态流入口，后续在这里发文字、图片和评论。</span>
+            </div>
+            <div class="room-list">
+                <div class="quick-action-card stack">
+                    <strong>当前状态</strong>
+                    <p>你现在有 {{ friends_count }} 位好友，朋友圈建议先从“好友可见的文字动态”开始做。</p>
+                </div>
+                <div class="quick-action-card stack">
+                    <strong>后续可做</strong>
+                    <p>点赞、评论、带图动态、仅自己可见、地理位置动态，都可以继续往这里加。</p>
+                </div>
+            </div>
+        </aside>
+
+        <section class="content-card panel-card content-card-feed inbox-chat-shell panel-switch active" data-panel="lobby">
+            <div class="embedded-chat-wrap">
+                <iframe
+                    id="conversation-frame"
+                    class="conversation-frame{% if not active_thread %} is-hidden{% endif %}"
+                    {% if active_thread %}src="{{ active_thread.embed_url }}"{% endif %}
+                    title="{% if active_thread %}{{ active_thread.name }}{% else %}当前会话{% endif %}"
+                ></iframe>
+                <div class="empty-chat-shell{% if active_thread %} is-hidden{% endif %}" id="empty-chat-shell">
+                    <div class="content-hero">
+                        <span class="section-label" id="welcome-label">欢迎回来</span>
+                        <h1 id="welcome-title">今天想聊点什么？</h1>
+                        <p id="welcome-desc">左边点一个群聊或者私聊名字，右边就会直接展开聊天；再点一次，会回到这里。</p>
+
+                        <div class="hero-grid">
+                            <div class="hero-card">
+                                <strong id="hero-card-1-title">随便坐坐</strong>
+                                <span id="hero-card-1-desc">想安静围观也行，想马上开聊也行，这里留给你一个轻松开始的地方。</span>
+                            </div>
+                            <div class="hero-card">
+                                <strong id="hero-card-2-title">找人说话</strong>
+                                <span id="hero-card-2-desc">看看左边有没有熟悉的名字，说不定刚好有人在线等你接话。</span>
+                            </div>
+                            <div class="hero-card">
+                                <strong id="hero-card-3-title">轻一点开始</strong>
+                                <span id="hero-card-3-desc">如果还没想好说什么，就先点开一个会话，聊天会自己慢慢展开。</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="content-card panel-card panel-switch" data-panel="friends" hidden>
             <div class="content-hero">
-                <span class="section-label" id="welcome-label">欢迎回来</span>
-                <h1 id="welcome-title">今天想聊点什么？</h1>
-                <p id="welcome-desc">左边有大家已经建好的房间，也可以自己新开一个。慢慢来，先找个顺眼的话题进去看看。</p>
+                <span class="section-label">好友工作台</span>
+                <h1>好友列表只负责找到人</h1>
+                <p>私聊未读已经挪回消息中心；这里现在只保留联系人名单，点名字直接进入聊天。</p>
 
                 <div class="hero-grid">
                     <div class="hero-card">
-                        <strong id="hero-card-1-title">随便坐坐</strong>
-                        <span id="hero-card-1-desc">想安静围观也行，想马上开聊也行，这里留给你一个轻松开始的地方。</span>
+                        <strong>直接聊天</strong>
+                        <span>现在点名字就能开聊，进入路径更像常见即时通讯工具。</span>
                     </div>
                     <div class="hero-card">
-                        <strong id="hero-card-2-title">找人说话</strong>
-                        <span id="hero-card-2-desc">看看左边有没有熟悉的房间名，说不定刚好有人在线等你接话。</span>
+                        <strong>左侧更干净</strong>
+                        <span>把多余按钮和状态字拿掉后，好友列表会更像真正的联系人栏，浏览也更顺手。</span>
                     </div>
                     <div class="hero-card">
-                        <strong id="hero-card-3-title">开个新话题</strong>
-                        <span id="hero-card-3-desc">如果没有合适的房间，就自己起个名字，把大家喊进来一起聊。</span>
+                        <strong>关系管理</strong>
+                        <span>删除好友、清除自己看到的历史、继续私聊，这些入口已经接到当前链路里了。</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="content-card panel-card panel-switch" data-panel="moments" hidden>
+            <div class="content-hero">
+                <span class="section-label">朋友圈工作台</span>
+                <h1>这里先保留给后续的动态流</h1>
+                <p>现在先不跳去独立页面了，直接在大厅页里切到这一栏，后面我们可以继续往这里接动态列表和发布入口。</p>
+
+                <div class="hero-grid">
+                    <div class="hero-card">
+                        <strong>发动态</strong>
+                        <span>第一版建议先做文字动态，确保交互和可见范围打通。</span>
+                    </div>
+                    <div class="hero-card">
+                        <strong>好友可见</strong>
+                        <span>先基于现有好友关系控制可见范围，后续再加分组和更细粒度权限。</span>
+                    </div>
+                    <div class="hero-card">
+                        <strong>互动能力</strong>
+                        <span>点赞、评论、图片和地理位置都能在这个工作台里逐步接上。</span>
                     </div>
                 </div>
             </div>
@@ -141,6 +234,8 @@
     <script>
         const roomSearchInput = document.getElementById('room-search');
         const roomCards = Array.from(document.querySelectorAll('.room-card[data-room-name]'));
+        const panelSwitchButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
+        const panelSwitchPanels = Array.from(document.querySelectorAll('.panel-switch'));
         const welcomeVariants = [
             {
                 label: '欢迎回来',
@@ -185,16 +280,41 @@
         ];
 
         const selectedWelcome = welcomeVariants[Math.floor(Math.random() * welcomeVariants.length)];
+        const welcomeLabel = document.getElementById('welcome-label');
+        const welcomeTitle = document.getElementById('welcome-title');
+        const welcomeDesc = document.getElementById('welcome-desc');
+        const heroCard1Title = document.getElementById('hero-card-1-title');
+        const heroCard1Desc = document.getElementById('hero-card-1-desc');
+        const heroCard2Title = document.getElementById('hero-card-2-title');
+        const heroCard2Desc = document.getElementById('hero-card-2-desc');
+        const heroCard3Title = document.getElementById('hero-card-3-title');
+        const heroCard3Desc = document.getElementById('hero-card-3-desc');
 
-        document.getElementById('welcome-label').textContent = selectedWelcome.label;
-        document.getElementById('welcome-title').textContent = selectedWelcome.title;
-        document.getElementById('welcome-desc').textContent = selectedWelcome.desc;
-        document.getElementById('hero-card-1-title').textContent = selectedWelcome.cards[0].title;
-        document.getElementById('hero-card-1-desc').textContent = selectedWelcome.cards[0].desc;
-        document.getElementById('hero-card-2-title').textContent = selectedWelcome.cards[1].title;
-        document.getElementById('hero-card-2-desc').textContent = selectedWelcome.cards[1].desc;
-        document.getElementById('hero-card-3-title').textContent = selectedWelcome.cards[2].title;
-        document.getElementById('hero-card-3-desc').textContent = selectedWelcome.cards[2].desc;
+        if (welcomeLabel) welcomeLabel.textContent = selectedWelcome.label;
+        if (welcomeTitle) welcomeTitle.textContent = selectedWelcome.title;
+        if (welcomeDesc) welcomeDesc.textContent = selectedWelcome.desc;
+        if (heroCard1Title) heroCard1Title.textContent = selectedWelcome.cards[0].title;
+        if (heroCard1Desc) heroCard1Desc.textContent = selectedWelcome.cards[0].desc;
+        if (heroCard2Title) heroCard2Title.textContent = selectedWelcome.cards[1].title;
+        if (heroCard2Desc) heroCard2Desc.textContent = selectedWelcome.cards[1].desc;
+        if (heroCard3Title) heroCard3Title.textContent = selectedWelcome.cards[2].title;
+        if (heroCard3Desc) heroCard3Desc.textContent = selectedWelcome.cards[2].desc;
+
+        function activatePanel(panelName) {
+            panelSwitchButtons.forEach((button) => {
+                button.classList.toggle('active', button.dataset.panelTarget === panelName);
+                button.setAttribute('aria-pressed', button.dataset.panelTarget === panelName ? 'true' : 'false');
+            });
+            panelSwitchPanels.forEach((panel) => {
+                const isActive = panel.dataset.panel === panelName;
+                panel.classList.toggle('active', isActive);
+                panel.hidden = !isActive;
+            });
+        }
+
+        panelSwitchButtons.forEach((button) => {
+            button.addEventListener('click', () => activatePanel(button.dataset.panelTarget));
+        });
 
         if (roomSearchInput) {
             roomSearchInput.addEventListener('input', (event) => {
@@ -203,10 +323,109 @@
                     const roomName = card.dataset.roomName || '';
                     const roomDescription = card.dataset.roomDescription || '';
                     const matched = !keyword || roomName.includes(keyword) || roomDescription.includes(keyword);
-                    card.style.display = matched ? 'flex' : 'none';
+                    card.style.display = matched ? '' : 'none';
                 });
             });
         }
+
+        const threadItems = Array.from(document.querySelectorAll('.unified-thread-item'));
+        const conversationFrame = document.getElementById('conversation-frame');
+        const emptyChatShell = document.getElementById('empty-chat-shell');
+        let activeThreadUrl = conversationFrame && conversationFrame.getAttribute('src')
+            ? conversationFrame.getAttribute('src')
+            : '';
+
+        function updateThreadQuery(item) {
+            const nextUrl = new URL(window.location.href);
+            if (item) {
+                nextUrl.searchParams.set('thread_type', item.dataset.threadType || '');
+                nextUrl.searchParams.set('target', item.dataset.threadTarget || '');
+            } else {
+                nextUrl.searchParams.delete('thread_type');
+                nextUrl.searchParams.delete('target');
+            }
+            window.history.replaceState({}, '', nextUrl);
+        }
+
+        function showEmptyState() {
+            activeThreadUrl = '';
+            threadItems.forEach((entry) => entry.classList.remove('active'));
+            updateThreadQuery(null);
+            if (conversationFrame) {
+                conversationFrame.removeAttribute('src');
+                conversationFrame.classList.add('is-hidden');
+                conversationFrame.title = '当前会话';
+            }
+            if (emptyChatShell) {
+                emptyChatShell.classList.remove('is-hidden');
+            }
+        }
+
+        function showThread(item) {
+            const threadUrl = item.dataset.threadUrl;
+            const threadName = item.dataset.threadName;
+
+            activeThreadUrl = threadUrl;
+            threadItems.forEach((entry) => entry.classList.remove('active'));
+            item.classList.add('active');
+            updateThreadQuery(item);
+
+            if (conversationFrame) {
+                conversationFrame.src = threadUrl;
+                conversationFrame.title = threadName;
+                conversationFrame.classList.remove('is-hidden');
+            }
+            if (emptyChatShell) {
+                emptyChatShell.classList.add('is-hidden');
+            }
+        }
+
+        threadItems.forEach((item) => {
+            item.addEventListener('click', () => {
+                const threadUrl = item.dataset.threadUrl;
+                if (activeThreadUrl === threadUrl && item.classList.contains('active')) {
+                    showEmptyState();
+                    return;
+                }
+                showThread(item);
+            });
+        });
+
+        const quickActionTrigger = document.getElementById('quick-action-trigger');
+        const quickActionMenu = document.getElementById('quick-action-menu');
+        let quickActionHideTimer = null;
+
+        function toggleQuickAction(forceState) {
+            if (!quickActionMenu || !quickActionTrigger) return;
+            const shouldOpen = typeof forceState === 'boolean'
+                ? forceState
+                : quickActionMenu.hidden;
+
+            window.clearTimeout(quickActionHideTimer);
+
+            if (shouldOpen) {
+                quickActionMenu.hidden = false;
+                requestAnimationFrame(() => {
+                    quickActionMenu.classList.add('open');
+                });
+            } else {
+                quickActionMenu.classList.remove('open');
+                quickActionHideTimer = window.setTimeout(() => {
+                    quickActionMenu.hidden = true;
+                }, 180);
+            }
+
+            quickActionTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+        }
+
+        if (quickActionTrigger) {
+            quickActionTrigger.addEventListener('click', () => toggleQuickAction());
+        }
+        document.addEventListener('click', (event) => {
+            if (!quickActionMenu || quickActionMenu.hidden) return;
+            if (event.target.closest('#quick-action-trigger') || event.target.closest('#quick-action-menu')) return;
+            toggleQuickAction(false);
+        });
     </script>
 </body>
 </html>

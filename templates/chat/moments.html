@@ -1,0 +1,63 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>朋友圈</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322g">
+</head>
+<body class="lobby-page">
+    <header class="topbar panel-card">
+        <div class="topbar-group">
+            <a href="{% url 'chat_index' %}" class="btn btn-secondary back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                返回大厅
+            </a>
+            <div class="brand-title">
+                <strong>朋友圈</strong>
+                <span>这一栏先把位置留好，后续我们就在这里做动态流。</span>
+            </div>
+        </div>
+        <div class="topbar-group">
+            <a href="{% url 'profile_settings' %}" class="settings-trigger settings-link" aria-label="个人设置">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
+                    <circle cx="12" cy="12" r="3.2"/>
+                </svg>
+            </a>
+            <a href="{% url 'logout' %}" class="btn btn-secondary">退出登录</a>
+        </div>
+    </header>
+
+    <main class="social-layout">
+        {% include 'chat/_module_rail.html' with active_section='moments' include_lobby_entry=False %}
+
+        <section class="content-card panel-card">
+            <div class="content-hero">
+                <span class="section-label">开发预留</span>
+                <h1>朋友圈入口已经搭好了</h1>
+                <p>目前先保留页面骨架和侧边栏导航，等你准备开始做动态流时，我们可以直接往这里加发布、点赞、评论和可见范围。</p>
+            </div>
+
+            <div class="quick-action-card stack">
+                <strong>当前基础</strong>
+                <p>你现在有 {{ friends_count }} 位好友，后面朋友圈可以先从“好友可见的文字动态”开始做。</p>
+            </div>
+
+            <div class="profile-action-grid">
+                <div class="quick-action-card stack">
+                    <strong>建议的第一版能力</strong>
+                    <p>先做文字动态、好友可见、点赞和评论，这样能先把核心结构稳住。</p>
+                </div>
+                <div class="quick-action-card stack">
+                    <strong>后续扩展方向</strong>
+                    <p>图片、多天可见、置顶、仅自己可见、地理位置动态，都可以在这个骨架上继续加。</p>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
