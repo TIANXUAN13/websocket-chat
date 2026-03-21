@@ -18,7 +18,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py runserver
+python manage.py runserver 0.0.0.0:8000
 ```
 
 或者直接一键启动：
@@ -40,7 +40,7 @@ http://127.0.0.1:8000/chat/login/
 如果你想按 ASGI 方式运行，也可以执行：
 
 ```bash
-daphne -b 127.0.0.1 -p 8000 websocket_project.asgi:application
+daphne -b 0.0.0.0 -p 8000 websocket_project.asgi:application
 ```
 
 ## 当前最小依赖

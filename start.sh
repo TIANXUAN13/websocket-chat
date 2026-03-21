@@ -54,5 +54,5 @@ echo "Installing dependencies from requirements.txt..."
 echo "Applying migrations..."
 "$PYTHON_BIN" manage.py migrate
 
-echo "Starting Django ASGI development server at http://127.0.0.1:8000"
-"$PYTHON_BIN" manage.py runserver 127.0.0.1:8000 --insecure
+echo "Starting Django ASGI development server at http://0.0.0.0:8000"
+"$PYTHON_BIN" manage.py runserver 0.0.0.0:8000 --insecure
