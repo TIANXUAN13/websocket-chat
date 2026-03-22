@@ -66,6 +66,10 @@
             <strong>创建房间</strong>
             <span>跳到独立页面完善群聊信息</span>
         </a>
+        <a href="{% url 'discover_rooms' %}" class="quick-action-menu-item">
+            <strong>搜索群聊</strong>
+            <span>通过群名或群 ID 查找并申请加入</span>
+        </a>
         <a href="{% url 'add_friend' %}" class="quick-action-menu-item">
             <strong>添加好友</strong>
             <span>跳到独立页面输入好友 ID</span>
@@ -631,7 +635,9 @@
                 });
 
                 if (inboxTriggerBadge) {
-                    const pendingCount = Number(data.pending_friend_requests_count || 0);
+                    const pendingCount = Number(data.pending_friend_requests_count || 0)
+                        + Number(data.pending_room_invites_count || 0)
+                        + Number(data.pending_room_join_requests_count || 0);
                     inboxTriggerBadge.hidden = pendingCount <= 0;
                     inboxTriggerBadge.textContent = pendingCount > 0 ? String(pendingCount) : '';
                 }

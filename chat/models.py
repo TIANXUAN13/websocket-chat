@@ -2,6 +2,7 @@ from django.db import models
 from django.db.utils import OperationalError, ProgrammingError
 from django.contrib.auth.models import User
 from django.core.validators import MinLengthValidator, RegexValidator
+import random
 from .presets import (
     CHAT_BUBBLE_STYLES,
     CHAT_COLOR_THEMES,
@@ -177,10 +178,24 @@ class UserChatProfile(models.Model):
 
 class Room(models.Model):
     """聊天室"""
+    JOIN_POLICY_OPEN = 'open'
+    JOIN_POLICY_APPROVAL = 'approval'
+    JOIN_POLICY_CHOICES = [
+        (JOIN_POLICY_OPEN, '可直接加入'),
+        (JOIN_POLICY_APPROVAL, '需要审批'),
+    ]
+
     name = models.CharField(max_length=100, unique=True, verbose_name='房间名称')
+    room_id = models.CharField(max_length=12, unique=True, blank=True, default='', verbose_name='群ID')
     avatar = models.CharField(max_length=8, default='💬', verbose_name='房间头像')
     avatar_image = models.ImageField(upload_to='room_avatars/', blank=True, null=True, verbose_name='房间头像图片')
     description = models.CharField(max_length=120, blank=True, default='一起聊聊吧', verbose_name='房间简介')
+    join_policy = models.CharField(
+        max_length=20,
+        choices=JOIN_POLICY_CHOICES,
+        default=JOIN_POLICY_APPROVAL,
+        verbose_name='入群方式',
+    )
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name='创建者')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     
@@ -191,6 +206,11 @@ class Room(models.Model):
     
     def __str__(self):
         return str(self.name)
+
+    def save(self, *args, **kwargs):
+        if not self.room_id or len(self.room_id) != 12 or not self.room_id.isdigit():
+            self.room_id = self.generate_unique_room_id(self.name, exclude_room_id=self.pk)
+        super().save(*args, **kwargs)
 
     @property
     def avatar_url(self):
@@ -216,6 +236,17 @@ class Room(models.Model):
             participants.add(self.created_by.username)
         return max(len(participants), 1)
 
+    @classmethod
+    def generate_unique_room_id(cls, name=None, exclude_room_id=None):
+        queryset = cls.objects.all()
+        if exclude_room_id:
+            queryset = queryset.exclude(pk=exclude_room_id)
+
+        candidate = ''.join(random.SystemRandom().choice('0123456789') for _ in range(12))
+        while queryset.filter(room_id=candidate).exists():
+            candidate = ''.join(random.SystemRandom().choice('0123456789') for _ in range(12))
+        return candidate
+
 
 class RoomMembership(models.Model):
     """群聊成员状态"""
@@ -236,6 +267,58 @@ class RoomMembership(models.Model):
     def __str__(self):
         status = 'active' if self.is_active else 'removed'
         return f"{self.room.name} - {self.user.username} ({status})"
+
+
+class RoomJoinRequest(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_REJECTED = 'rejected'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, '待处理'),
+        (STATUS_ACCEPTED, '已通过'),
+        (STATUS_REJECTED, '已拒绝'),
+    ]
+
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='join_requests')
+    requester = models.ForeignKey(User, on_delete=models.CASCADE, related_name='room_join_requests')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    note = models.CharField(max_length=160, blank=True, default='', verbose_name='申请备注')
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = '入群申请'
+        verbose_name_plural = '入群申请'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['room', 'requester'], name='unique_room_join_request_pair'),
+        ]
+
+
+class RoomInvitation(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_DECLINED = 'declined'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, '待处理'),
+        (STATUS_ACCEPTED, '已接受'),
+        (STATUS_DECLINED, '已拒绝'),
+    ]
+
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='invitations')
+    invited_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='room_invitations')
+    invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_room_invitations')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = '群邀请'
+        verbose_name_plural = '群邀请'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['room', 'invited_user'], name='unique_room_invitation_pair'),
+        ]
 
 
 class Message(models.Model):

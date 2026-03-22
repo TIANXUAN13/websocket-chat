@@ -1,0 +1,114 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>搜索群聊</title>
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322ab">
+</head>
+<body class="lobby-page mobile-compact-shell">
+    <header class="topbar panel-card">
+        <div class="topbar-group">
+            <a href="{% url 'chat_index' %}" class="btn btn-secondary back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                <span class="back-link-label">返回大厅</span>
+            </a>
+            <div class="brand-title">
+                <strong>搜索群聊</strong>
+                <span>通过群名、群ID查找群聊，再选择直接加入或提交申请。</span>
+            </div>
+        </div>
+    </header>
+
+    {% if messages %}
+        <div class="toast-container">
+            {% for message in messages %}
+                <div class="toast {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="social-layout">
+        {% include 'chat/_module_rail.html' with active_section='lobby' include_lobby_entry=True %}
+        <section class="content-card panel-card content-card-feed">
+            <div class="content-hero">
+                <span class="section-label">群发现</span>
+                <h1>先搜，再决定要不要进群</h1>
+                <p>搜索结果不会自动进入你的会话列表，只有成功加入后才会显示。</p>
+            </div>
+
+            <form class="settings-section compact-section" method="get">
+                <div class="stack">
+                    <label class="field-label" for="room-search-query">搜索内容</label>
+                    <input class="form-input" id="room-search-query" name="q" type="search" value="{{ query }}" placeholder="输入群名、群ID或简介关键词">
+                </div>
+                <button class="btn btn-primary" type="submit">搜索群聊</button>
+            </form>
+
+            <div class="settings-section compact-section">
+                <div class="settings-section-head">
+                    <strong>搜索结果</strong>
+                    <span>{% if query %}当前关键词：{{ query }}{% else %}先输入关键词开始搜索。{% endif %}</span>
+                </div>
+                <div class="friend-grid">
+                    {% if room_results %}
+                        {% for room in room_results %}
+                            <div class="request-card">
+                                <div class="user-item-left">
+                                    <div class="mini-avatar{% if room.avatar_image %} has-photo{% endif %}">
+                                        {% if room.avatar_image %}
+                                            <img class="avatar-photo" src="{{ room.avatar_image.url }}" alt="{{ room.name }} 的群头像">
+                                        {% else %}
+                                            {{ room.avatar|default:room.name|slice:":2" }}
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <strong class="room-title">{{ room.name }}</strong>
+                                        <div class="room-meta">
+                                            <span>群ID：{{ room.room_id }}</span>
+                                            <span>{{ room.get_join_policy_display }}</span>
+                                            <span>{{ room.total_members }} 人</span>
+                                        </div>
+                                        <div class="thread-preview">{{ room.description }}</div>
+                                    </div>
+                                </div>
+                                <div class="request-actions">
+                                    {% if room.id in accessible_room_ids %}
+                                        <a class="btn btn-primary" href="{% url 'chat_index' %}?thread_type=room&target={{ room.name|urlencode }}">进入聊天</a>
+                                    {% elif room.id in pending_invite_room_ids %}
+                                        <a class="btn btn-secondary" href="{% url 'inbox' %}">去处理邀请</a>
+                                    {% elif room.id in pending_request_room_ids %}
+                                        <button class="btn btn-secondary" type="button" disabled>已申请</button>
+                                    {% else %}
+                                        <form method="post" action="{% url 'join_room' room.room_id %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            {% if room.join_policy == 'approval' %}
+                                                <input class="form-input" name="note" type="text" maxlength="160" placeholder="填写申请信息，方便审核人了解你的来意">
+                                            {% endif %}
+                                            <button class="btn btn-primary" type="submit">{% if room.join_policy == 'open' %}直接加入{% else %}申请加入{% endif %}</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% elif query %}
+                        <div class="quick-action-card">
+                            <strong>没有搜到匹配群聊</strong>
+                            <p>可以换个群名关键词，或者让朋友把群 ID 发给你。</p>
+                        </div>
+                    {% else %}
+                        <div class="quick-action-card">
+                            <strong>还没开始搜索</strong>
+                            <p>输入群名、群ID或简介关键词后，这里会列出可申请加入的群聊。</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

@@ -15,6 +15,8 @@ from .models import (
     Friendship,
     Message,
     Room,
+    RoomInvitation,
+    RoomJoinRequest,
     RoomMembership,
     UserChatProfile,
     UserLocation,
@@ -183,6 +185,95 @@ class ChatAppearanceTests(TestCase):
         RoomMembership.objects.create(room=self.room, user=other, is_active=False)
 
         self.assertEqual(self.room.total_members, 1)
+
+    def test_room_generates_room_id_and_defaults_to_approval_join_policy(self):
+        self.assertRegex(self.room.room_id, r'^\d{12}$')
+        self.assertEqual(self.room.join_policy, Room.JOIN_POLICY_APPROVAL)
+
+    def test_index_only_shows_rooms_for_joined_members(self):
+        other = User.objects.create_user(username='bob', password='secret123')
+        hidden_room = Room.objects.create(name='hidden-room', created_by=other)
+        RoomMembership.objects.create(room=hidden_room, user=other, is_active=True)
+        RoomMembership.objects.create(room=self.room, user=self.user, is_active=True)
+        self.login_with_valid_session()
+
+        response = self.client.get(reverse('chat_index'))
+
+        self.assertEqual(response.status_code, 200)
+        room_names = [item['room'].name for item in response.context['room_items']]
+        self.assertIn(self.room.name, room_names)
+        self.assertNotIn(hidden_room.name, room_names)
+
+    def test_non_member_cannot_open_room_page(self):
+        other = User.objects.create_user(username='bob', password='secret123')
+        hidden_room = Room.objects.create(name='hidden-room', created_by=other)
+        RoomMembership.objects.create(room=hidden_room, user=other, is_active=True)
+        self.login_with_valid_session()
+
+        response = self.client.get(reverse('chat_room', args=[hidden_room.name]), follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '你还不是这个群聊的成员')
+
+    def test_create_room_supports_join_policy(self):
+        self.login_with_valid_session()
+
+        response = self.client.post(
+            reverse('create_room'),
+            {
+                'room_name': 'approval-room',
+                'room_avatar': '💬',
+                'room_description': '需要审批',
+                'join_policy': Room.JOIN_POLICY_OPEN,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created_room = Room.objects.get(name='approval-room')
+        self.assertEqual(created_room.join_policy, Room.JOIN_POLICY_OPEN)
+
+    def test_join_open_room_creates_active_membership(self):
+        owner = User.objects.create_user(username='owner', password='secret123')
+        open_room = Room.objects.create(name='open-room', created_by=owner, join_policy=Room.JOIN_POLICY_OPEN)
+        RoomMembership.objects.create(room=open_room, user=owner, is_active=True)
+        self.login_with_valid_session()
+
+        response = self.client.post(reverse('join_room', args=[open_room.room_id]))
+
+        self.assertEqual(response.status_code, 302)
+        membership = RoomMembership.objects.get(room=open_room, user=self.user)
+        self.assertTrue(membership.is_active)
+
+    def test_join_approval_room_creates_pending_request(self):
+        owner = User.objects.create_user(username='owner2', password='secret123')
+        approval_room = Room.objects.create(name='approval-room-2', created_by=owner, join_policy=Room.JOIN_POLICY_APPROVAL)
+        RoomMembership.objects.create(room=approval_room, user=owner, is_active=True)
+        self.login_with_valid_session()
+
+        response = self.client.post(reverse('join_room', args=[approval_room.room_id]), {'note': '想加入聊聊'})
+
+        self.assertEqual(response.status_code, 302)
+        join_request = RoomJoinRequest.objects.get(room=approval_room, requester=self.user)
+        self.assertEqual(join_request.status, RoomJoinRequest.STATUS_PENDING)
+
+    def test_removed_member_can_reapply_and_reset_old_accepted_request(self):
+        owner = User.objects.create_user(username='owner3', password='secret123')
+        approval_room = Room.objects.create(name='approval-room-3', created_by=owner, join_policy=Room.JOIN_POLICY_APPROVAL)
+        RoomMembership.objects.create(room=approval_room, user=owner, is_active=True)
+        RoomMembership.objects.create(room=approval_room, user=self.user, is_active=False)
+        RoomJoinRequest.objects.create(
+            room=approval_room,
+            requester=self.user,
+            status=RoomJoinRequest.STATUS_ACCEPTED,
+        )
+        self.login_with_valid_session()
+
+        response = self.client.post(reverse('join_room', args=[approval_room.room_id]), {'note': '重新申请加入'})
+
+        self.assertEqual(response.status_code, 302)
+        join_request = RoomJoinRequest.objects.get(room=approval_room, requester=self.user)
+        self.assertEqual(join_request.status, RoomJoinRequest.STATUS_PENDING)
+        self.assertEqual(join_request.note, '重新申请加入')
 
 
 class DirectMessageFlowTests(TestCase):

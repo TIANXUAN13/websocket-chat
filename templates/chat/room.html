@@ -29,6 +29,7 @@
                     <strong>{{ room.name }}</strong>
                     <span>{{ room.description }}</span>
                     <div class="room-stats-inline">
+                        <span class="pill pill-muted">群ID {{ room.room_id }}</span>
                         <span class="pill pill-muted">总人数 <strong id="total-member-count">{{ room_total_members }}</strong></span>
                         <span class="pill pill-muted">在线人数 <strong id="online-member-count">{{ room_online_members }}</strong></span>
                         {% if is_owner %}
@@ -115,6 +116,10 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="room_settings">
                 <div class="stack">
+                    <label class="field-label" for="room_id_display">群ID</label>
+                    <input class="form-input" id="room_id_display" type="text" value="{{ room.room_id }}" readonly>
+                </div>
+                <div class="stack">
                     <label class="field-label" for="room_name">房间名</label>
                     <input class="form-input" id="room_name" name="room_name" type="text" value="{{ room.name }}" maxlength="100" required>
                 </div>
@@ -122,15 +127,95 @@
                     <label class="field-label" for="room_description">群简介</label>
                     <input class="form-input" id="room_description" name="room_description" type="text" value="{{ room.description }}" maxlength="120">
                 </div>
+                <div class="stack">
+                    <label class="field-label" for="join_policy">入群方式</label>
+                    <select class="form-input" id="join_policy" name="join_policy">
+                        <option value="open" {% if room.join_policy == 'open' %}selected{% endif %}>可直接加入</option>
+                        <option value="approval" {% if room.join_policy == 'approval' %}selected{% endif %}>需要审批</option>
+                    </select>
+                </div>
                 <button class="btn btn-secondary" type="submit">保存资料</button>
             </form>
         {% else %}
             <div class="quick-action-card stack">
                 <strong>{{ room.name }}</strong>
                 <p>{{ room.description }}</p>
+                <span class="pill pill-muted">群ID：{{ room.room_id }}</span>
+                <span class="pill pill-muted">入群方式：{{ room.get_join_policy_display }}</span>
                 {% if room.avatar_image %}
                     <span class="pill pill-muted">当前群头像：图片</span>
                 {% endif %}
+            </div>
+        {% endif %}
+
+        {% if can_manage_room_avatar %}
+            <form class="room-settings-form" method="post" action="{% url 'invite_to_room' %}">
+                {% csrf_token %}
+                <input type="hidden" name="room_id" value="{{ room.room_id }}">
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="settings-section-head">
+                    <strong>邀请成员</strong>
+                    <span>可以从好友里选，也可以直接输入好友 ID 邀请。</span>
+                </div>
+                {% if inviteable_friends %}
+                    <div class="stack">
+                        <label class="field-label" for="invite_friend_id">邀请好友</label>
+                        <select class="form-input" id="invite_friend_id" name="friend_id">
+                            <option value="">选择一个好友</option>
+                            {% for item in inviteable_friends %}
+                                <option value="{{ item.friend.chat_profile.friend_id }}">{{ item.friend.username }} · {{ item.friend.chat_profile.friend_id }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                {% endif %}
+                <div class="stack">
+                    <label class="field-label" for="invite_friend_id_manual">或输入好友 ID</label>
+                    <input class="form-input" id="invite_friend_id_manual" name="manual_friend_id" type="text" maxlength="11" placeholder="例如：friend001">
+                </div>
+                <button class="btn btn-secondary" type="submit">发送邀请</button>
+            </form>
+        {% endif %}
+
+        {% if can_manage_room_avatar and pending_join_requests %}
+            <div class="settings-section">
+                <div class="settings-section-head">
+                    <strong>入群申请</strong>
+                    <span>群主和管理员都可以处理待审批的入群申请。</span>
+                </div>
+                <div class="friend-grid">
+                    {% for item in pending_join_requests %}
+                        <div class="request-card">
+                            <div class="user-item-left">
+                                <div class="mini-avatar{% if item.requester.chat_profile.avatar_image %} has-photo{% endif %}">
+                                    {% if item.requester.chat_profile.avatar_image %}
+                                        <img class="avatar-photo" src="{{ item.requester.chat_profile.avatar_image.url }}" alt="{{ item.requester.username }} 的头像">
+                                    {% else %}
+                                        {{ item.requester.chat_profile.get_avatar_label|default:item.requester.username|slice:":2" }}
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <strong class="room-title">{{ item.requester.username }}</strong>
+                                    <div class="room-meta">
+                                        <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                                        {% if item.note %}<span>{{ item.note }}</span>{% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="request-actions">
+                                <form method="post" action="{% url 'respond_room_join_request' item.id %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="accept">
+                                    <button class="btn btn-success" type="submit">通过</button>
+                                </form>
+                                <form method="post" action="{% url 'respond_room_join_request' item.id %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="reject">
+                                    <button class="btn btn-secondary" type="submit">拒绝</button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
             </div>
         {% endif %}
 

@@ -37,7 +37,7 @@
             <div class="content-hero">
                 <span class="section-label">新建群聊</span>
                 <h1>给房间起个清楚一点的名字</h1>
-                <p>创建成功后会直接进入房间。</p>
+                <p>创建成功后会回到消息列表，并自动打开新群聊。</p>
             </div>
 
             <form class="settings-section profile-settings-form" method="post">
@@ -57,6 +57,15 @@
                 <div class="stack">
                     <label class="field-label" for="room_description">群简介</label>
                     <input class="form-input" id="room_description" type="text" name="room_description" maxlength="120" placeholder="一句话介绍这个房间">
+                </div>
+                <div class="stack">
+                    <label class="field-label" for="join_policy">入群方式</label>
+                    <select class="form-input" id="join_policy" name="join_policy">
+                        {% for value, label in room_join_policy_choices %}
+                            <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="avatar-upload-help">群聊会先只对群成员显示；后续其他用户可以通过搜索、群 ID 或邀请来加入。</div>
                 </div>
                 <button class="btn btn-primary" type="submit">创建房间</button>
             </form>

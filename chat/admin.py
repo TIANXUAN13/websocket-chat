@@ -8,6 +8,8 @@ from .models import (
     Friendship,
     Message,
     Room,
+    RoomInvitation,
+    RoomJoinRequest,
     RoomMembership,
     SiteConfiguration,
     UserChatProfile,
@@ -18,8 +20,9 @@ from .models import (
 
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
-    list_display = ('name', 'created_by', 'avatar', 'avatar_image', 'created_at')
-    search_fields = ('name', 'created_by__username')
+    list_display = ('name', 'room_id', 'join_policy', 'created_by', 'avatar', 'avatar_image', 'created_at')
+    list_filter = ('join_policy',)
+    search_fields = ('name', 'room_id', 'created_by__username')
 
 
 @admin.register(Message)
@@ -34,6 +37,20 @@ class RoomMembershipAdmin(admin.ModelAdmin):
     list_display = ('room', 'user', 'is_active', 'is_admin', 'joined_at', 'removed_at')
     list_filter = ('is_active', 'is_admin')
     search_fields = ('room__name', 'user__username')
+
+
+@admin.register(RoomJoinRequest)
+class RoomJoinRequestAdmin(admin.ModelAdmin):
+    list_display = ('room', 'requester', 'status', 'created_at', 'responded_at')
+    list_filter = ('status',)
+    search_fields = ('room__name', 'room__room_id', 'requester__username')
+
+
+@admin.register(RoomInvitation)
+class RoomInvitationAdmin(admin.ModelAdmin):
+    list_display = ('room', 'invited_user', 'invited_by', 'status', 'created_at', 'responded_at')
+    list_filter = ('status',)
+    search_fields = ('room__name', 'room__room_id', 'invited_user__username', 'invited_by__username')
 
 
 @admin.register(SiteConfiguration)

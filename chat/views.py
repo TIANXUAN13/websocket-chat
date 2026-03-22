@@ -38,6 +38,8 @@ from .models import (
     FriendRequest,
     Friendship,
     Room,
+    RoomInvitation,
+    RoomJoinRequest,
     RoomMembership,
     SiteConfiguration,
     RoomVisitState,
@@ -210,8 +212,7 @@ def get_or_create_room_membership(room, user):
 def get_room_membership(room, user):
     if not room or not user or not user.is_authenticated:
         return None
-    membership, _ = get_or_create_room_membership(room, user)
-    return membership
+    return RoomMembership.objects.filter(room=room, user=user).first()
 
 
 def can_manage_room_avatar(room, user, membership=None):
@@ -221,6 +222,35 @@ def can_manage_room_avatar(room, user, membership=None):
         return True
     membership = membership or get_room_membership(room, user)
     return bool(membership and membership.is_active and membership.is_admin)
+
+
+def get_accessible_rooms_queryset(user):
+    if not user or not user.is_authenticated:
+        return Room.objects.none()
+    return Room.objects.filter(
+        Q(created_by=user) | Q(memberships__user=user, memberships__is_active=True)
+    ).distinct()
+
+
+def get_pending_room_invites_queryset(user):
+    if not user or not user.is_authenticated:
+        return RoomInvitation.objects.none()
+    return RoomInvitation.objects.filter(
+        invited_user=user,
+        status=RoomInvitation.STATUS_PENDING,
+    ).select_related('room', 'invited_by', 'invited_by__chat_profile')
+
+
+def get_manageable_rooms_queryset(user):
+    if not user or not user.is_authenticated:
+        return Room.objects.none()
+    return Room.objects.filter(
+        Q(created_by=user) | Q(memberships__user=user, memberships__is_active=True, memberships__is_admin=True)
+    ).distinct()
+
+
+def can_manage_room_members(room, user, membership=None):
+    return can_manage_room_avatar(room, user, membership=membership)
 
 
 def get_direct_visibility_cutoff(state):
@@ -238,7 +268,7 @@ def get_visible_direct_messages(conversation, state):
 
 def build_room_threads(user):
     threads = []
-    rooms = Room.objects.all().prefetch_related('messages')
+    rooms = get_accessible_rooms_queryset(user).prefetch_related('messages')
     embed_version = '20260322n'
     for room in rooms:
         latest_message = room.messages.order_by('-timestamp').first()
@@ -313,6 +343,15 @@ def get_inbox_context(user):
         recipient=user,
         status=FriendRequest.STATUS_PENDING,
     ).select_related('sender', 'sender__chat_profile')
+    pending_room_invites = get_pending_room_invites_queryset(user)
+    pending_room_join_requests = RoomJoinRequest.objects.filter(
+        room__in=get_manageable_rooms_queryset(user),
+        status=RoomJoinRequest.STATUS_PENDING,
+    ).select_related('room', 'requester', 'requester__chat_profile').distinct()
+    rejected_room_join_requests = RoomJoinRequest.objects.filter(
+        requester=user,
+        status=RoomJoinRequest.STATUS_REJECTED,
+    ).select_related('room')[:12]
     room_threads = build_room_threads(user)
     direct_threads = build_direct_threads(user)
     conversation_threads = sorted(room_threads + direct_threads, key=lambda item: item['last_message_at'], reverse=True)
@@ -320,6 +359,11 @@ def get_inbox_context(user):
     return {
         'pending_requests': pending_requests,
         'pending_friend_requests_count': pending_requests.count(),
+        'pending_room_invites': pending_room_invites,
+        'pending_room_invites_count': pending_room_invites.count(),
+        'pending_room_join_requests': pending_room_join_requests,
+        'pending_room_join_requests_count': pending_room_join_requests.count(),
+        'rejected_room_join_requests': rejected_room_join_requests,
         'room_threads': room_threads,
         'direct_threads': direct_threads,
         'conversation_threads': conversation_threads,
@@ -537,16 +581,12 @@ def index(request):
                 messages.success(request, f'房间 "{room_name}" 创建成功')
         return redirect('chat_index')
     
-    rooms = Room.objects.all()
+    rooms = get_accessible_rooms_queryset(request.user)
     profile = get_or_create_chat_profile(request.user)
     incoming_friend_requests = FriendRequest.objects.filter(
         recipient=request.user,
         status=FriendRequest.STATUS_PENDING,
     ).select_related('sender', 'sender__chat_profile')[:5]
-    pending_count = FriendRequest.objects.filter(
-        recipient=request.user,
-        status=FriendRequest.STATUS_PENDING,
-    ).count()
     inbox_context = get_inbox_context(request.user)
     room_unread_map = {item['name']: item['unread_count'] for item in inbox_context['room_threads']}
     direct_unread_map = {item['name']: item['unread_count'] for item in inbox_context['direct_threads']}
@@ -585,8 +625,10 @@ def index(request):
         'room_avatars': DEFAULT_ROOM_AVATARS,
         'user': request.user,
         'chat_profile': profile,
-        'pending_friend_requests_count': pending_count,
-        'inbox_badge_count': pending_count,
+        'pending_friend_requests_count': inbox_context['pending_friend_requests_count'],
+        'pending_room_invites_count': inbox_context['pending_room_invites_count'],
+        'pending_room_join_requests_count': inbox_context['pending_room_join_requests_count'],
+        'inbox_badge_count': inbox_context['pending_friend_requests_count'] + inbox_context['pending_room_invites_count'] + inbox_context['pending_room_join_requests_count'],
         'incoming_friend_requests': incoming_friend_requests,
         'friends': friends,
         'friend_items': friend_items,
@@ -637,6 +679,10 @@ def room(request, room_name):
 
     if not room:
         messages.error(request, '房间不存在')
+        return redirect('chat_index')
+
+    if not is_owner and not (room_membership and room_membership.is_active):
+        messages.error(request, '你还不是这个群聊的成员，暂时不能查看群内容')
         return redirect('chat_index')
 
     try:
@@ -747,8 +793,12 @@ def room(request, room_name):
             return redirect_to_room(room.name)
 
         new_room_name = request.POST.get('room_name', room.name).strip() or room.name
+        new_join_policy = request.POST.get('join_policy', room.join_policy).strip() or room.join_policy
+        if new_join_policy not in dict(Room.JOIN_POLICY_CHOICES):
+            new_join_policy = room.join_policy
         room.description = request.POST.get('room_description', room.description).strip()[:120] or '一起聊聊吧'
         room.name = new_room_name
+        room.join_policy = new_join_policy
 
         try:
             room.save()
@@ -768,6 +818,10 @@ def room(request, room_name):
         recipient=request.user,
         status=FriendRequest.STATUS_PENDING,
     ).count()
+    inviteable_friends = Friendship.objects.filter(user=request.user).exclude(
+        friend__room_memberships__room=room,
+        friend__room_memberships__is_active=True,
+    ).select_related('friend', 'friend__chat_profile').distinct()
     return render(request, 'chat/room.html', {
         'room': room,
         'room_avatars': DEFAULT_ROOM_AVATARS,
@@ -786,8 +840,10 @@ def room(request, room_name):
         'chat_profile_payload_json': mark_safe(json.dumps(chat_profile.to_payload())),
         'chat_theme_choices': CHAT_COLOR_THEMES.items(),
         'chat_style_choices': CHAT_BUBBLE_STYLES.items(),
+        'inviteable_friends': inviteable_friends,
+        'pending_join_requests': RoomJoinRequest.objects.filter(room=room, status=RoomJoinRequest.STATUS_PENDING).select_related('requester', 'requester__chat_profile'),
         'pending_friend_requests_count': pending_friend_requests_count,
-        'inbox_badge_count': pending_friend_requests_count,
+        'inbox_badge_count': pending_friend_requests_count + get_pending_room_invites_queryset(request.user).count(),
         'embed_mode': embed_mode,
     })
 
@@ -942,6 +998,8 @@ def inbox_summary(request):
     context = get_inbox_context(request.user)
     return JsonResponse({
         'pending_friend_requests_count': context['pending_friend_requests_count'],
+        'pending_room_invites_count': context['pending_room_invites_count'],
+        'pending_room_join_requests_count': context['pending_room_join_requests_count'],
         'total_unread_count': context['total_unread_count'],
         'room_threads': [
             {
@@ -1198,9 +1256,12 @@ def create_room_page(request):
         room_name = request.POST.get('room_name', '').strip()
         room_avatar = request.POST.get('room_avatar', '💬').strip() or '💬'
         room_description = request.POST.get('room_description', '').strip()
+        join_policy = request.POST.get('join_policy', Room.JOIN_POLICY_APPROVAL).strip() or Room.JOIN_POLICY_APPROVAL
 
         if room_avatar not in DEFAULT_ROOM_AVATARS:
             room_avatar = '💬'
+        if join_policy not in dict(Room.JOIN_POLICY_CHOICES):
+            join_policy = Room.JOIN_POLICY_APPROVAL
         if not room_description:
             room_description = '一起聊聊吧'
 
@@ -1210,6 +1271,7 @@ def create_room_page(request):
             else:
                 room = Room.objects.create(
                     name=room_name,
+                    join_policy=join_policy,
                     avatar=room_avatar,
                     description=room_description[:120],
                     created_by=request.user,
@@ -1221,11 +1283,255 @@ def create_room_page(request):
     return render(request, 'chat/create_room.html', {
         'chat_profile': get_or_create_chat_profile(request.user),
         'room_avatars': DEFAULT_ROOM_AVATARS,
+        'room_join_policy_choices': Room.JOIN_POLICY_CHOICES,
         'pending_friend_requests_count': FriendRequest.objects.filter(
             recipient=request.user,
             status=FriendRequest.STATUS_PENDING,
         ).count(),
     })
+
+
+@login_required
+def discover_rooms_page(request):
+    profile = get_or_create_chat_profile(request.user)
+    query = request.GET.get('q', '').strip()
+    accessible_rooms = get_accessible_rooms_queryset(request.user)
+    accessible_room_ids = list(accessible_rooms.values_list('id', flat=True))
+    pending_request_room_ids = set(
+        RoomJoinRequest.objects.filter(
+            requester=request.user,
+            status=RoomJoinRequest.STATUS_PENDING,
+        ).values_list('room_id', flat=True)
+    )
+    pending_invite_room_ids = set(
+        RoomInvitation.objects.filter(
+            invited_user=request.user,
+            status=RoomInvitation.STATUS_PENDING,
+        ).values_list('room_id', flat=True)
+    )
+
+    room_results = Room.objects.order_by('-created_at')
+    if query:
+        room_results = room_results.filter(
+            Q(name__icontains=query) | Q(room_id__icontains=query) | Q(description__icontains=query)
+        )
+    else:
+        room_results = room_results.none()
+
+    return render(request, 'chat/discover_rooms.html', {
+        'chat_profile': profile,
+        'query': query,
+        'room_results': room_results[:30],
+        'accessible_room_ids': accessible_room_ids,
+        'pending_request_room_ids': pending_request_room_ids,
+        'pending_invite_room_ids': pending_invite_room_ids,
+        'pending_friend_requests_count': FriendRequest.objects.filter(
+            recipient=request.user,
+            status=FriendRequest.STATUS_PENDING,
+        ).count(),
+    })
+
+
+@login_required
+@require_POST
+def join_room(request, room_id):
+    next_url = request.POST.get('next') or reverse('discover_rooms')
+    try:
+        room = Room.objects.get(room_id=room_id)
+    except Room.DoesNotExist:
+        messages.error(request, '群聊不存在')
+        return redirect(next_url)
+
+    membership = get_room_membership(room, request.user)
+    if membership and membership.is_active:
+        messages.info(request, '你已经在这个群里了')
+        return redirect(f"{reverse('chat_index')}?thread_type=room&target={quote(room.name)}")
+
+    pending_invitation = RoomInvitation.objects.filter(
+        room=room,
+        invited_user=request.user,
+        status=RoomInvitation.STATUS_PENDING,
+    ).first()
+    if pending_invitation:
+        messages.info(request, '你已经收到了这个群聊的邀请，请去消息中心处理')
+        return redirect('inbox')
+
+    if room.join_policy == Room.JOIN_POLICY_OPEN:
+        membership, _ = RoomMembership.objects.get_or_create(
+            room=room,
+            user=request.user,
+            defaults={'is_active': True, 'removed_at': None},
+        )
+        membership.is_active = True
+        membership.removed_at = None
+        membership.save(update_fields=['is_active', 'removed_at'])
+        RoomJoinRequest.objects.filter(room=room, requester=request.user).exclude(
+            status=RoomJoinRequest.STATUS_ACCEPTED
+        ).delete()
+        messages.success(request, f'已加入群聊「{room.name}」')
+        return redirect(f"{reverse('chat_index')}?thread_type=room&target={quote(room.name)}")
+
+    join_request, created = RoomJoinRequest.objects.get_or_create(
+        room=room,
+        requester=request.user,
+        defaults={
+            'status': RoomJoinRequest.STATUS_PENDING,
+            'note': request.POST.get('note', '').strip()[:160],
+        },
+    )
+    if not created and join_request.status == RoomJoinRequest.STATUS_REJECTED:
+        join_request.status = RoomJoinRequest.STATUS_PENDING
+        join_request.note = request.POST.get('note', '').strip()[:160]
+        join_request.responded_at = None
+        join_request.save(update_fields=['status', 'note', 'responded_at'])
+    elif not created and join_request.status == RoomJoinRequest.STATUS_ACCEPTED:
+        join_request.status = RoomJoinRequest.STATUS_PENDING
+        join_request.note = request.POST.get('note', '').strip()[:160]
+        join_request.responded_at = None
+        join_request.save(update_fields=['status', 'note', 'responded_at'])
+    elif not created and join_request.status == RoomJoinRequest.STATUS_PENDING:
+        messages.info(request, '你已经提交过入群申请了')
+        return redirect(next_url)
+
+    messages.success(request, f'已提交加入「{room.name}」的申请')
+    return redirect(next_url)
+
+
+@login_required
+@require_POST
+def invite_to_room(request):
+    room_id = request.POST.get('room_id', '').strip()
+    next_url = request.POST.get('next') or reverse('chat_index')
+    try:
+        room = Room.objects.get(room_id=room_id)
+    except Room.DoesNotExist:
+        messages.error(request, '群聊不存在')
+        return redirect(next_url)
+
+    membership = get_room_membership(room, request.user)
+    if not can_manage_room_members(room, request.user, membership=membership):
+        messages.error(request, '只有群主或群管理员才能邀请成员')
+        return redirect(next_url)
+
+    target_friend_id = request.POST.get('friend_id', '').strip().lower() or request.POST.get('manual_friend_id', '').strip().lower()
+    target_username = request.POST.get('username', '').strip()
+    target_user = None
+    if target_friend_id:
+        target_profile = UserChatProfile.objects.filter(friend_id=target_friend_id).select_related('user').first()
+        target_user = target_profile.user if target_profile else None
+    elif target_username:
+        target_user = User.objects.filter(username=target_username).first()
+
+    if not target_user:
+        messages.error(request, '没有找到要邀请的用户')
+        return redirect(next_url)
+    if target_user == request.user:
+        messages.error(request, '不能邀请自己')
+        return redirect(next_url)
+    if not are_friends(request.user, target_user):
+        messages.error(request, '只能邀请你的好友入群')
+        return redirect(next_url)
+
+    target_membership = get_room_membership(room, target_user)
+    if target_membership and target_membership.is_active:
+        messages.info(request, '对方已经在群里了')
+        return redirect(next_url)
+
+    invitation, created = RoomInvitation.objects.get_or_create(
+        room=room,
+        invited_user=target_user,
+        defaults={
+            'invited_by': request.user,
+            'status': RoomInvitation.STATUS_PENDING,
+        },
+    )
+    if not created and invitation.status == RoomInvitation.STATUS_DECLINED:
+        invitation.status = RoomInvitation.STATUS_PENDING
+        invitation.invited_by = request.user
+        invitation.responded_at = None
+        invitation.save(update_fields=['status', 'invited_by', 'responded_at'])
+    elif not created and invitation.status == RoomInvitation.STATUS_PENDING:
+        messages.info(request, '已经发过邀请了')
+        return redirect(next_url)
+
+    messages.success(request, f'已邀请 {target_user.username} 加入「{room.name}」')
+    return redirect(next_url)
+
+
+@login_required
+@require_POST
+def respond_room_invitation(request, invitation_id):
+    try:
+        invitation = RoomInvitation.objects.select_related('room').get(id=invitation_id, invited_user=request.user)
+    except RoomInvitation.DoesNotExist:
+        messages.error(request, '群邀请不存在')
+        return redirect('inbox')
+
+    if invitation.status != RoomInvitation.STATUS_PENDING:
+        messages.info(request, '这条群邀请已经处理过了')
+        return redirect('inbox')
+
+    action = request.POST.get('action', '').strip()
+    if action == 'accept':
+        membership, _ = RoomMembership.objects.get_or_create(
+            room=invitation.room,
+            user=request.user,
+            defaults={'is_active': True, 'removed_at': None},
+        )
+        membership.is_active = True
+        membership.removed_at = None
+        membership.save(update_fields=['is_active', 'removed_at'])
+        invitation.status = RoomInvitation.STATUS_ACCEPTED
+        invitation.responded_at = timezone.now()
+        invitation.save(update_fields=['status', 'responded_at'])
+        messages.success(request, f'已加入群聊「{invitation.room.name}」')
+        return redirect(f"{reverse('chat_index')}?thread_type=room&target={quote(invitation.room.name)}")
+
+    invitation.status = RoomInvitation.STATUS_DECLINED
+    invitation.responded_at = timezone.now()
+    invitation.save(update_fields=['status', 'responded_at'])
+    messages.success(request, '已拒绝群邀请')
+    return redirect('inbox')
+
+
+@login_required
+@require_POST
+def respond_room_join_request(request, request_id):
+    try:
+        join_request = RoomJoinRequest.objects.select_related('room', 'requester').get(id=request_id)
+    except RoomJoinRequest.DoesNotExist:
+        messages.error(request, '入群申请不存在')
+        return redirect('inbox')
+
+    membership = get_room_membership(join_request.room, request.user)
+    if not can_manage_room_members(join_request.room, request.user, membership=membership):
+        messages.error(request, '只有群主或群管理员才能处理入群申请')
+        return redirect('inbox')
+    if join_request.status != RoomJoinRequest.STATUS_PENDING:
+        messages.info(request, '这条入群申请已经处理过了')
+        return redirect('inbox')
+
+    action = request.POST.get('action', '').strip()
+    if action == 'accept':
+        requester_membership, _ = RoomMembership.objects.get_or_create(
+            room=join_request.room,
+            user=join_request.requester,
+            defaults={'is_active': True, 'removed_at': None},
+        )
+        requester_membership.is_active = True
+        requester_membership.removed_at = None
+        requester_membership.save(update_fields=['is_active', 'removed_at'])
+        join_request.status = RoomJoinRequest.STATUS_ACCEPTED
+        join_request.responded_at = timezone.now()
+        join_request.save(update_fields=['status', 'responded_at'])
+        messages.success(request, f'已通过 {join_request.requester.username} 的入群申请')
+        return redirect('inbox')
+
+    join_request.status = RoomJoinRequest.STATUS_REJECTED
+    join_request.responded_at = timezone.now()
+    join_request.save(update_fields=['status', 'responded_at'])
+    messages.success(request, f'已拒绝 {join_request.requester.username} 的入群申请')
+    return redirect('inbox')
 
 
 @login_required

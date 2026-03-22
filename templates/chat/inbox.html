@@ -21,7 +21,7 @@
             </div>
         </div>
         <div class="topbar-group">
-            <span class="pill pill-owner">申请 {{ pending_friend_requests_count }}</span>
+            <span class="pill pill-owner">通知 {{ pending_friend_requests_count|add:pending_room_invites_count|add:pending_room_join_requests_count }}</span>
             <a href="{% url 'profile_settings' %}?next={{ request.get_full_path|urlencode }}" class="settings-trigger settings-link" aria-label="个人设置">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                     <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
@@ -87,6 +87,124 @@
                         <div class="quick-action-card">
                             <strong>暂时没有新的好友申请</strong>
                             <p>后续新的申请会继续出现在这里。</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="settings-section compact-section">
+                <div class="settings-section-head">
+                    <strong>群通知</strong>
+                    <span>统一查看群邀请、入群审批和最近的入群结果。</span>
+                </div>
+                <div class="friend-grid">
+                    {% if pending_room_invites %}
+                        {% for item in pending_room_invites %}
+                            <div class="request-card">
+                                <div class="user-item-left">
+                                    <div class="mini-avatar{% if item.room.avatar_image %} has-photo{% endif %}">
+                                        {% if item.room.avatar_image %}
+                                            <img class="avatar-photo" src="{{ item.room.avatar_image.url }}" alt="{{ item.room.name }} 的群头像">
+                                        {% else %}
+                                            {{ item.room.avatar|default:item.room.name|slice:":2" }}
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <strong class="room-title">{{ item.room.name }}</strong>
+                                        <div class="room-meta">
+                                            <span>群邀请</span>
+                                            <span>群ID：{{ item.room.room_id }}</span>
+                                            <span>邀请人：{{ item.invited_by.username }}</span>
+                                            <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="request-actions">
+                                    <form method="post" action="{% url 'respond_room_invitation' item.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="accept">
+                                        <button class="btn btn-success" type="submit">加入</button>
+                                    </form>
+                                    <form method="post" action="{% url 'respond_room_invitation' item.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="reject">
+                                        <button class="btn btn-secondary" type="submit">拒绝</button>
+                                    </form>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    {% if pending_room_join_requests %}
+                        {% for item in pending_room_join_requests %}
+                            <div class="request-card">
+                                <div class="user-item-left">
+                                    <a href="{% url 'user_profile' item.requester.username %}?next={{ request.get_full_path|urlencode }}" class="mini-avatar avatar-link{% if item.requester.chat_profile.avatar_image %} has-photo{% endif %}">
+                                        {% if item.requester.chat_profile.avatar_image %}
+                                            <img class="avatar-photo" src="{{ item.requester.chat_profile.avatar_image.url }}" alt="{{ item.requester.username }} 的头像">
+                                        {% else %}
+                                            {{ item.requester.chat_profile.get_avatar_label|default:item.requester.username|slice:":2" }}
+                                        {% endif %}
+                                    </a>
+                                    <div>
+                                        <strong class="room-title">{{ item.requester.username }}</strong>
+                                        <div class="room-meta">
+                                            <span>入群审批</span>
+                                            <span>申请加入：{{ item.room.name }}</span>
+                                            <span>群ID：{{ item.room.room_id }}</span>
+                                            <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                                            {% if item.note %}<span>{{ item.note }}</span>{% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="request-actions">
+                                    <form method="post" action="{% url 'respond_room_join_request' item.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="accept">
+                                        <button class="btn btn-success" type="submit">通过</button>
+                                    </form>
+                                    <form method="post" action="{% url 'respond_room_join_request' item.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="reject">
+                                        <button class="btn btn-secondary" type="submit">拒绝</button>
+                                    </form>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    {% if rejected_room_join_requests %}
+                        {% for item in rejected_room_join_requests %}
+                            <div class="request-card">
+                                <div class="user-item-left">
+                                    <div class="mini-avatar{% if item.room.avatar_image %} has-photo{% endif %}">
+                                        {% if item.room.avatar_image %}
+                                            <img class="avatar-photo" src="{{ item.room.avatar_image.url }}" alt="{{ item.room.name }} 的群头像">
+                                        {% else %}
+                                            {{ item.room.avatar|default:item.room.name|slice:":2" }}
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <strong class="room-title">{{ item.room.name }}</strong>
+                                        <div class="room-meta">
+                                            <span>入群结果</span>
+                                            <span>群ID：{{ item.room.room_id }}</span>
+                                            <span>{% if item.responded_at %}{{ item.responded_at|date:"m-d H:i" }}{% else %}已处理{% endif %}</span>
+                                            <span>已拒绝加入</span>
+                                        </div>
+                                        {% if item.note %}
+                                            <div class="thread-preview">你的申请信息：{{ item.note }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    {% if not pending_room_invites and not pending_room_join_requests and not rejected_room_join_requests %}
+                        <div class="quick-action-card">
+                            <strong>暂时没有新的群通知</strong>
+                            <p>群邀请、入群审批和最近的入群结果都会统一显示在这里。</p>
                         </div>
                     {% endif %}
                 </div>
