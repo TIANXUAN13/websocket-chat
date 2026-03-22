@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>消息中心</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322l">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322r">
 </head>
 <body class="lobby-page">
     <header class="topbar panel-card">
@@ -18,7 +18,6 @@
             </a>
             <div class="brand-title">
                 <strong>消息中心</strong>
-                <span>群聊和私聊都放在同一个会话列表里。</span>
             </div>
         </div>
         <div class="topbar-group">
@@ -45,10 +44,6 @@
         {% include 'chat/_module_rail.html' with active_section='lobby' include_lobby_entry=True %}
 
         <aside class="sidebar-card panel-card room-browser-card">
-            <div class="sidebar-heading">
-                <strong>会话列表</strong>
-                <span>群聊和私聊混排，点一下直接在右边打开。</span>
-            </div>
             <div class="room-list conversation-list">
                 {% if conversation_threads %}
                     {% for item in conversation_threads %}
