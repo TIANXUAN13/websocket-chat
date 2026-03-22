@@ -11,6 +11,7 @@ from django.contrib.auth.password_validation import password_validators_help_tex
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
+from django.views.decorators.cache import never_cache
 from django.utils.safestring import mark_safe
 from django.http import JsonResponse
 from django.urls import reverse
@@ -247,6 +248,7 @@ def build_room_member_records(room, current_user):
     return member_records
 
 
+@never_cache
 @ensure_csrf_cookie
 @csrf_protect
 def login_view(request):
@@ -301,6 +303,7 @@ def login_view(request):
     return render(request, 'chat/login.html', {'form': form})
 
 
+@never_cache
 @ensure_csrf_cookie
 def register_view(request):
     """注册页面"""
