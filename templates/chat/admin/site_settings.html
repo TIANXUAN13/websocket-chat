@@ -1,0 +1,53 @@
+{% extends 'chat/admin/base.html' %}
+
+{% block title %}站点设置{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <span class="section-label">Site Settings</span>
+    <h1>站点设置</h1>
+    <p>统一管理 CSRF 受信任来源、跨域响应来源和默认管理员信息，避免每次都改代码。</p>
+</div>
+
+<div class="admin-sections">
+    <div class="section panel-card">
+        <h2>跨域与来源设置</h2>
+        <form method="post" class="stack">
+            {% csrf_token %}
+            {% for field in form %}
+                <div class="stack">
+                    <label class="field-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}
+                        <p class="form-help">{{ field.help_text }}</p>
+                    {% endif %}
+                    {% for error in field.errors %}
+                        <p class="form-error">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary">保存设置</button>
+        </form>
+    </div>
+
+    <div class="section panel-card">
+        <h2>默认管理员</h2>
+        <p>系统会在迁移完成后自动确保存在一个管理员账号，便于你首次登录后台。</p>
+        <div class="profile-summary-list">
+            <div class="summary-row">
+                <span>用户名</span>
+                <strong>{{ default_admin_username }}</strong>
+            </div>
+            <div class="summary-row">
+                <span>默认密码</span>
+                <strong>{{ default_admin_password }}</strong>
+            </div>
+        </div>
+        <p class="form-help">首次登录后建议立刻到“用户管理”里修改密码。</p>
+    </div>
+    <div class="section panel-card">
+        <h2>当前问题建议</h2>
+        <p>你这次遇到的报错可以直接把 <code>https://chat.6143443.xyz</code> 填进“CSRF 受信任来源”。如果前端和后端分域，还可以同时填进 “CORS 允许来源”。</p>
+    </div>
+</div>
+{% endblock %}

@@ -339,3 +339,31 @@ class RoomVisitState(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['room', 'user'], name='unique_room_visit_state'),
         ]
+
+
+class SiteConfiguration(models.Model):
+    """站点运行配置"""
+    trusted_origins = models.TextField(blank=True, default='', verbose_name='CSRF 受信任来源')
+    cors_allowed_origins = models.TextField(blank=True, default='', verbose_name='CORS 允许来源')
+    allow_all_cors = models.BooleanField(default=False, verbose_name='允许全部跨域来源')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    class Meta:
+        verbose_name = '站点配置'
+        verbose_name_plural = '站点配置'
+
+    @classmethod
+    def get_solo(cls):
+        try:
+            return cls.objects.order_by('id').first() or cls.objects.create()
+        except (OperationalError, ProgrammingError):
+            return None
+
+    @staticmethod
+    def parse_origin_lines(raw_value):
+        items = []
+        for line in (raw_value or '').splitlines():
+            normalized = line.strip()
+            if normalized and normalized not in items:
+                items.append(normalized)
+        return items

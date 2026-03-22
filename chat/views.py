@@ -6,20 +6,21 @@ from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.password_validation import password_validators_help_text_html
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
 from django.utils.safestring import mark_safe
 from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
-from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.sessions.models import Session
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.db import IntegrityError
 from django.db.utils import OperationalError, ProgrammingError
 from django.db.models import Q
-from .forms import RegistrationForm
+from .forms import AdminUserPasswordForm, RegistrationForm, SiteConfigurationForm
 from .models import (
     DirectConversation,
     DirectConversationState,
@@ -28,6 +29,7 @@ from .models import (
     Friendship,
     Room,
     RoomMembership,
+    SiteConfiguration,
     RoomVisitState,
     UserChatProfile,
     UserSession,
@@ -1073,6 +1075,7 @@ def admin_dashboard(request):
         'recent_users': recent_users,
         'rooms': rooms,
         'user_sessions': user_sessions,
+        'site_config': SiteConfiguration.get_solo(),
     }
     
     return render(request, 'chat/admin/dashboard.html', context)
@@ -1098,6 +1101,7 @@ def admin_users(request):
                     messages.success(request, f'用户 {user.username} 已删除')
                 elif action == 'toggle_superuser':
                     user.is_superuser = not user.is_superuser
+                    user.is_staff = user.is_superuser
                     user.save()
                     messages.success(request, f'用户 {user.username} 的管理员状态已更改')
                 elif action == 'toggle_active':
@@ -1156,3 +1160,47 @@ def admin_sessions(request):
         return redirect('admin_sessions')
     
     return render(request, 'chat/admin/sessions.html', {'sessions': sessions})
+
+
+@user_passes_test(is_admin_user)
+def admin_user_password(request, user_id):
+    """管理员修改用户密码"""
+    try:
+        managed_user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        messages.error(request, '用户不存在')
+        return redirect('admin_users')
+
+    form = AdminUserPasswordForm(managed_user, request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, f'用户 {managed_user.username} 的密码已更新')
+        return redirect('admin_users')
+
+    return render(request, 'chat/admin/user_password.html', {
+        'managed_user': managed_user,
+        'form': form,
+        'password_help_html': mark_safe(password_validators_help_text_html()),
+    })
+
+
+@user_passes_test(is_admin_user)
+def admin_site_settings(request):
+    """站点设置"""
+    site_config = SiteConfiguration.get_solo()
+    if site_config is None:
+        messages.error(request, '当前数据库尚未完成站点配置初始化，请先执行 migrate')
+        return redirect('admin_dashboard')
+
+    form = SiteConfigurationForm(request.POST or None, instance=site_config)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, '站点设置已更新，新的受信任来源会在后续请求中生效')
+        return redirect('admin_site_settings')
+
+    return render(request, 'chat/admin/site_settings.html', {
+        'form': form,
+        'site_config': site_config,
+        'default_admin_username': 'xyadmin',
+        'default_admin_password': 'xyadmin123',
+    })

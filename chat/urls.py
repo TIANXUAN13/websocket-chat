@@ -23,12 +23,12 @@ urlpatterns = [
     path('read/room/<str:room_name>/', views.mark_room_read, name='mark_room_read'),
     path('read/dm/<str:username>/', views.mark_direct_read, name='mark_direct_read'),
     path('delete/<str:room_name>/', views.delete_room, name='delete_room'),
-    path('', views.index, name='chat_index'),
-    path('<str:room_name>/', views.room, name='chat_room'),
-    
-    # 管理员界面
     path('admin/', views.admin_dashboard, name='admin_dashboard'),
+    path('admin/settings/', views.admin_site_settings, name='admin_site_settings'),
     path('admin/users/', views.admin_users, name='admin_users'),
+    path('admin/users/<int:user_id>/password/', views.admin_user_password, name='admin_user_password'),
     path('admin/rooms/', views.admin_rooms, name='admin_rooms'),
     path('admin/sessions/', views.admin_sessions, name='admin_sessions'),
+    path('', views.index, name='chat_index'),
+    path('<str:room_name>/', views.room, name='chat_room'),
 ]

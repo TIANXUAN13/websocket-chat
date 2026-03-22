@@ -8,18 +8,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-your-secret-key-here'
 
 DEBUG = True
-ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '.ngrok-free.app', '.ngrok.io']
+ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '.ngrok-free.app', '.ngrok.io', 'chat.6143443.xyz']
 
-CSRF_TRUSTED_ORIGINS = [
+DEFAULT_CSRF_TRUSTED_ORIGINS = [
     'https://*.ngrok-free.app',
     'https://*.ngrok.io',
     'http://*.ngrok-free.app',
     'http://*.ngrok.io',
     'https://www.dongwu.eu.cc',
+    'https://chat.6143443.xyz',
 ]
+CSRF_TRUSTED_ORIGINS = list(DEFAULT_CSRF_TRUSTED_ORIGINS)
 
 # 如果需要处理跨域
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
+DEFAULT_CORS_ALLOWED_ORIGINS = [
+    'https://chat.6143443.xyz',
+]
 # 添加应用
 INSTALLED_APPS = [
     'daphne',
@@ -36,6 +41,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'chat.origin_middleware.DynamicOriginSettingsMiddleware',
+    'chat.origin_middleware.DynamicCorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -102,9 +109,6 @@ CSRF_COOKIE_AGE = 60 * 60 * 24 * 7  # 7天
 CSRF_COOKIE_DOMAIN = None
 CSRF_COOKIE_PATH = '/'
 CSRF_COOKIE_SAMESITE = 'Lax'
-
-# 确保允许所有主机（开发环境）
-ALLOWED_HOSTS = ['*']
 
 # Channels配置
 CHANNEL_LAYERS = {

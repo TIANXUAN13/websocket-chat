@@ -9,6 +9,7 @@ from .models import (
     Message,
     Room,
     RoomMembership,
+    SiteConfiguration,
     UserChatProfile,
     UserLocation,
     UserSession,
@@ -33,6 +34,11 @@ class RoomMembershipAdmin(admin.ModelAdmin):
     list_display = ('room', 'user', 'is_active', 'joined_at', 'removed_at')
     list_filter = ('is_active',)
     search_fields = ('room__name', 'user__username')
+
+
+@admin.register(SiteConfiguration)
+class SiteConfigurationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'allow_all_cors', 'updated_at')
 
 
 @admin.register(UserLocation)

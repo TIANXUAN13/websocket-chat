@@ -28,10 +28,26 @@
     <div class="section panel-card">
         <h2>快速导航</h2>
         <div class="nav-links">
+            <a href="{% url 'admin_site_settings' %}" class="nav-link">站点设置</a>
             <a href="{% url 'admin_users' %}" class="nav-link">用户管理</a>
             <a href="{% url 'admin_rooms' %}" class="nav-link">房间管理</a>
             <a href="{% url 'admin_sessions' %}" class="nav-link">会话管理</a>
             <a href="/admin/" class="nav-link">Django Admin</a>
+        </div>
+    </div>
+
+    <div class="section panel-card">
+        <h2>站点运行设置</h2>
+        <p>可以在“站点设置”里维护 CSRF 受信任来源、CORS 允许来源，以及默认管理员账号信息。</p>
+        <div class="profile-summary-list">
+            <div class="summary-row">
+                <span>当前允许全部跨域</span>
+                <strong>{% if site_config and site_config.allow_all_cors %}是{% else %}否{% endif %}</strong>
+            </div>
+            <div class="summary-row">
+                <span>已配置 CSRF 来源</span>
+                <strong>{% if site_config and site_config.trusted_origins %}已配置{% else %}使用默认值{% endif %}</strong>
+            </div>
         </div>
     </div>
 

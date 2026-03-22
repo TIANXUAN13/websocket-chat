@@ -72,6 +72,7 @@
                                         <button type="submit" name="action" value="toggle_superuser" class="btn btn-sm">
                                             {% if user.is_superuser %}取消管理员{% else %}设为管理员{% endif %}
                                         </button>
+                                        <a href="{% url 'admin_user_password' user.id %}" class="btn btn-sm">改密码</a>
                                         <button type="submit" name="action" value="delete" class="btn btn-danger btn-sm" 
                                                 onclick="return confirm('确定要删除用户 {{ user.username }} 吗？此操作不可撤销！')">
                                             删除
