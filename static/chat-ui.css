@@ -1154,7 +1154,13 @@ select.form-input {
 
 .app-hub-page {
     height: 100dvh;
+    padding: 18px;
     overflow: hidden;
+    gap: 18px;
+}
+
+.app-hub-page .topbar {
+    margin: 0;
 }
 
 .topbar {
@@ -1272,7 +1278,7 @@ select.form-input {
     gap: 18px;
     flex: 1;
     min-height: 0;
-    padding: 0 18px 18px;
+    padding: 0;
     align-items: stretch;
     overflow: hidden;
 }
