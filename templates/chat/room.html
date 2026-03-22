@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ room_name }} - 聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322z">
 </head>
 <body class="room-page{% if embed_mode %} embed-chat-page{% endif %}">
     {% if not embed_mode %}
@@ -42,7 +42,7 @@
                     <span class="notification-badge">{{ inbox_badge_count|default:pending_friend_requests_count }}</span>
                 {% endif %}
             </a>
-            <a class="settings-trigger settings-link" href="{% url 'profile_settings' %}" aria-label="个人设置">
+            <a class="settings-trigger settings-link" href="{% url 'profile_settings' %}?next={{ request.get_full_path|urlencode }}" aria-label="个人设置">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                     <path d="M12 3a1 1 0 011 1v1.08a7 7 0 015.92 5.92H20a1 1 0 110 2h-1.08A7 7 0 0113 18.92V20a1 1 0 11-2 0v-1.08A7 7 0 015.08 13H4a1 1 0 110-2h1.08A7 7 0 0111 5.08V4a1 1 0 011-1z"/>
                     <circle cx="12" cy="12" r="3.2"/>
@@ -207,6 +207,7 @@
         const csrfToken = '{{ csrf_token }}';
         const markRoomReadUrl = '{% url "mark_room_read" room_name %}';
         const userProfileUrlTemplate = '{% url "user_profile" "__username__" %}';
+        const userProfileNextQuery = 'next={{ request.get_full_path|urlencode }}';
         let baseRoomMembers = {{ room_members_json }};
         const isRemovedFromRoom = {{ is_removed_from_room|yesno:"true,false" }};
         let historyOffset = 0;
@@ -546,7 +547,7 @@
         }
 
         function getUserProfileUrl(name) {
-            return userProfileUrlTemplate.replace('__username__', encodeURIComponent(name));
+            return `${userProfileUrlTemplate.replace('__username__', encodeURIComponent(name))}?${userProfileNextQuery}`;
         }
 
         async function syncPreciseLocation(position) {

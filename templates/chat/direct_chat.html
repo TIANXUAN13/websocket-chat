@@ -5,17 +5,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>与 {{ other_user.username }} 的私聊</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322z">
 </head>
 <body class="room-page direct-chat-page{% if embed_mode %} embed-chat-page{% endif %}">
     {% if not embed_mode %}
     <header class="room-topbar panel-card">
         <div class="room-header-main">
-            <a href="{% url 'friends' %}" class="btn btn-secondary back-link">
+            <a href="{{ next_url }}" class="btn btn-secondary back-link">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M19 12H5M12 19l-7-7 7-7"/>
                 </svg>
-                <span class="back-link-label">返回好友列表</span>
+                <span class="back-link-label">返回消息列表</span>
             </a>
             <div class="room-identity">
                 <div class="room-glyph room-avatar room-avatar-large{% if other_profile.avatar_image %} has-photo{% endif %}">
@@ -80,7 +80,7 @@
             </div>
             <div class="quick-action-card stack">
                 <strong>好友操作</strong>
-                <a class="btn btn-secondary" href="{% url 'user_profile' other_user.username %}">查看好友资料</a>
+                <a class="btn btn-secondary" href="{% url 'user_profile' other_user.username %}?next={{ request.get_full_path|urlencode }}">查看好友资料</a>
                 <form method="post" action="{% url 'remove_friend' other_user.username %}">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{% url 'friends' %}">

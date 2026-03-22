@@ -2751,6 +2751,17 @@ select.form-input {
     line-height: 1.8;
 }
 
+.profile-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.profile-detail-actions form {
+    margin: 0;
+}
+
 .profile-meta-list,
 .profile-action-grid,
 .profile-summary-list {
@@ -3883,6 +3894,17 @@ code {
     .mobile-compact-shell .profile-card-large {
         padding: 18px 16px;
         border-radius: 20px;
+    }
+
+    .mobile-compact-shell .profile-detail-actions {
+        display: grid;
+        gap: 10px;
+    }
+
+    .mobile-compact-shell .profile-detail-actions .btn,
+    .mobile-compact-shell .profile-detail-actions form,
+    .mobile-compact-shell .profile-detail-actions form .btn {
+        width: 100%;
     }
 
     .mobile-compact-shell .profile-detail-avatar {

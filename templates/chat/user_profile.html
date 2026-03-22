@@ -5,12 +5,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ target_user.username }} 的资料</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322z">
 </head>
 <body class="lobby-page mobile-compact-shell">
     <header class="topbar panel-card">
         <div class="topbar-group">
-            <a href="{% url 'chat_index' %}" class="btn btn-secondary back-link">
+            <a href="{{ next_url }}" class="btn btn-secondary back-link">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M19 12H5M12 19l-7-7 7-7"/>
                 </svg>
@@ -31,7 +31,7 @@
                     <span class="notification-badge">{{ pending_friend_requests_count }}</span>
                 {% endif %}
             </a>
-            <a href="{% url 'profile_settings' %}" class="settings-trigger settings-link" aria-label="个人设置">
+            <a href="{% url 'profile_settings' %}?next={{ request.get_full_path|urlencode }}" class="settings-trigger settings-link" aria-label="个人设置">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                     <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
                     <circle cx="12" cy="12" r="3.2"/>
@@ -67,6 +67,24 @@
                         {% endif %}
                     </div>
                     <p>{{ target_profile.bio|default:"这个人还没有写个人介绍。" }}</p>
+                    <div class="profile-detail-actions">
+                        {% if is_self %}
+                            <a class="btn btn-primary" href="{% url 'profile_settings' %}?next={{ request.get_full_path|urlencode }}">编辑我的设置</a>
+                        {% elif is_friend %}
+                            <a class="btn btn-primary" href="{% url 'direct_chat' target_user.username %}?next={{ request.get_full_path|urlencode }}">发消息</a>
+                        {% elif incoming_request %}
+                            <a class="btn btn-primary" href="{% url 'inbox' %}">去处理好友申请</a>
+                        {% elif outgoing_request %}
+                            <a class="btn btn-secondary" href="{% url 'inbox' %}">查看申请状态</a>
+                        {% else %}
+                            <form class="stack" method="post" action="{% url 'send_friend_request' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="friend_id" value="{{ target_profile.friend_id }}">
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <button class="btn btn-primary" type="submit">加好友后发消息</button>
+                            </form>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </aside>
@@ -83,13 +101,13 @@
                     <div class="quick-action-card stack">
                         <strong>这是你自己的资料页</strong>
                         <p>头像文字、好友 ID、个人介绍和聊天气泡都可以在个人设置里调整。</p>
-                        <a class="btn btn-primary" href="{% url 'profile_settings' %}">打开个人设置</a>
+                        <a class="btn btn-primary" href="{% url 'profile_settings' %}?next={{ request.get_full_path|urlencode }}">打开个人设置</a>
                     </div>
                 {% elif is_friend %}
                     <div class="quick-action-card stack">
                         <strong>你们已经是好友</strong>
                         <p>可以直接开始私聊，聊天记录会自动保存；如果需要，也能在私聊页清除自己看到的历史。</p>
-                        <a class="btn btn-primary" href="{% url 'direct_chat' target_user.username %}">直接聊天</a>
+                        <a class="btn btn-primary" href="{% url 'direct_chat' target_user.username %}?next={{ request.get_full_path|urlencode }}">直接聊天</a>
                     </div>
                 {% elif incoming_request %}
                     <div class="quick-action-card stack">
@@ -110,7 +128,7 @@
                         <form class="stack" method="post" action="{% url 'send_friend_request' %}">
                             {% csrf_token %}
                             <input type="hidden" name="friend_id" value="{{ target_profile.friend_id }}">
-                            <input type="hidden" name="next" value="{% url 'user_profile' target_user.username %}">
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
                             <button class="btn btn-primary" type="submit">发送好友申请</button>
                         </form>
                     </div>

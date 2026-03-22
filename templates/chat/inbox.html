@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>消息中心</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322z">
 </head>
 <body class="lobby-page mobile-compact-shell">
     <header class="topbar panel-card">
@@ -22,7 +22,7 @@
         </div>
         <div class="topbar-group">
             <span class="pill pill-owner">申请 {{ pending_friend_requests_count }}</span>
-            <a href="{% url 'profile_settings' %}" class="settings-trigger settings-link" aria-label="个人设置">
+            <a href="{% url 'profile_settings' %}?next={{ request.get_full_path|urlencode }}" class="settings-trigger settings-link" aria-label="个人设置">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                     <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
                     <circle cx="12" cy="12" r="3.2"/>
@@ -54,7 +54,7 @@
                         {% for item in pending_requests %}
                             <div class="request-card">
                                 <div class="user-item-left">
-                                    <a href="{% url 'user_profile' item.sender.username %}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
+                                    <a href="{% url 'user_profile' item.sender.username %}?next={{ request.get_full_path|urlencode }}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
                                         {% if item.sender.chat_profile.avatar_image %}
                                             <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.username }} 的头像">
                                         {% else %}
@@ -62,7 +62,7 @@
                                         {% endif %}
                                     </a>
                                     <div>
-                                        <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.username %}">{{ item.sender.username }}</a></strong>
+                                        <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.username %}?next={{ request.get_full_path|urlencode }}">{{ item.sender.username }}</a></strong>
                                         <div class="room-meta">
                                             <span>好友 ID：{{ item.sender.chat_profile.friend_id }}</span>
                                             <span>{{ item.created_at|date:"m-d H:i" }}</span>
@@ -102,7 +102,7 @@
                         {% for item in friend_requests_history %}
                             <div class="request-card">
                                 <div class="user-item-left">
-                                    <a href="{% url 'user_profile' item.sender.username %}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
+                                    <a href="{% url 'user_profile' item.sender.username %}?next={{ request.get_full_path|urlencode }}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
                                         {% if item.sender.chat_profile.avatar_image %}
                                             <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.username }} 的头像">
                                         {% else %}
@@ -110,7 +110,7 @@
                                         {% endif %}
                                     </a>
                                     <div>
-                                        <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.username %}">{{ item.sender.username }}</a></strong>
+                                        <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.username %}?next={{ request.get_full_path|urlencode }}">{{ item.sender.username }}</a></strong>
                                         <div class="room-meta">
                                             <span>好友 ID：{{ item.sender.chat_profile.friend_id }}</span>
                                             <span>{{ item.created_at|date:"m-d H:i" }}</span>

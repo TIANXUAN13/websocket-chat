@@ -3,4 +3,4 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-exec "$PROJECT_DIR/start_mac.sh" "$@"
+exec "$PROJECT_DIR/scripts/service.sh" dev "$@"

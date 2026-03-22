@@ -18,6 +18,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.views.decorators.cache import never_cache
 from django.utils.safestring import mark_safe
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -53,6 +54,18 @@ MAX_AVATAR_DIMENSION = 720
 
 def build_room_group_name(room_name):
     return f"chat_{hashlib.sha256(room_name.encode('utf-8')).hexdigest()[:32]}"
+
+
+def get_safe_next_url(request, fallback_name='chat_index'):
+    fallback_url = reverse(fallback_name)
+    candidate = request.POST.get('next') or request.GET.get('next') or ''
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return fallback_url
 
 
 def notify_user_presence_changed(user):
@@ -627,6 +640,7 @@ def profile_settings(request):
 
     chat_profile = get_or_create_chat_profile(request.user)
     password_form = ProfilePasswordChangeForm(request.user)
+    profile_settings_url = reverse('profile_settings')
 
     if request.method == 'POST':
         form_type = request.POST.get('form_type', 'profile')
@@ -642,14 +656,14 @@ def profile_settings(request):
             requested_friend_id = request.POST.get('friend_id', '').strip().lower()
             if requested_friend_id and UserChatProfile.objects.exclude(user=request.user).filter(friend_id=requested_friend_id).exists():
                 messages.error(request, '这个好友 ID 已经被别人使用了')
-                return redirect('profile_settings')
+                return redirect(profile_settings_url)
 
             if requested_friend_id and (len(requested_friend_id) < 8 or len(requested_friend_id) > 11):
                 messages.error(request, '好友 ID 长度需要在 8 到 11 位之间')
-                return redirect('profile_settings')
+                return redirect(profile_settings_url)
             if requested_friend_id and not all(ch.isalnum() or ch == '_' for ch in requested_friend_id):
                 messages.error(request, '好友 ID 只能包含小写字母、数字或下划线')
-                return redirect('profile_settings')
+                return redirect(profile_settings_url)
 
             chat_profile.friend_id = requested_friend_id or UserChatProfile.generate_unique_friend_id(
                 request.user.username,
@@ -676,7 +690,7 @@ def profile_settings(request):
                     optimized_avatar = compress_avatar_upload(uploaded_avatar, request.user.username)
                 except ValueError as exc:
                     messages.error(request, str(exc))
-                    return redirect('profile_settings')
+                    return redirect(profile_settings_url)
 
                 if chat_profile.avatar_image:
                     chat_profile.delete_avatar_image_file()
@@ -903,6 +917,7 @@ def user_profile(request, username):
             recipient=request.user,
             status=FriendRequest.STATUS_PENDING,
         ).first()
+    next_url = get_safe_next_url(request)
 
     return render(request, 'chat/user_profile.html', {
         'chat_profile': own_profile,
@@ -913,6 +928,7 @@ def user_profile(request, username):
         'outgoing_request': outgoing_request,
         'incoming_request': incoming_request,
         'current_location': getattr(target_user, 'location', None),
+        'next_url': next_url,
         'pending_friend_requests_count': FriendRequest.objects.filter(
             recipient=request.user,
             status=FriendRequest.STATUS_PENDING,
@@ -944,6 +960,7 @@ def direct_chat(request, username):
     state.save(update_fields=['deleted_at', 'last_read_at'])
     own_profile = get_or_create_chat_profile(request.user)
     other_profile = get_or_create_chat_profile(other_user)
+    next_url = get_safe_next_url(request, fallback_name='chat_index')
 
     if request.method == 'POST':
         action = request.POST.get('action', 'send')
@@ -951,12 +968,12 @@ def direct_chat(request, username):
             state.cleared_at = timezone.now()
             state.save(update_fields=['cleared_at'])
             messages.success(request, '已清空你这边看到的私聊历史')
-            return redirect('direct_chat', username=other_user.username)
+            return redirect(f"{reverse('direct_chat', args=[other_user.username])}?next={quote(next_url)}")
 
         content = request.POST.get('content', '').strip()
         if content:
             DirectMessage.objects.create(conversation=conversation, sender=request.user, content=content)
-            return redirect('direct_chat', username=other_user.username)
+            return redirect(f"{reverse('direct_chat', args=[other_user.username])}?next={quote(next_url)}")
 
     messages_qs = get_visible_direct_messages(conversation, state)
     messages_list = list(messages_qs)
@@ -983,6 +1000,7 @@ def direct_chat(request, username):
         ).count(),
         'inbox_badge_count': inbox_context['pending_friend_requests_count'],
         'embed_mode': embed_mode,
+        'next_url': next_url,
     })
 
 

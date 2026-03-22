@@ -85,3 +85,4 @@ class ProfilePasswordChangeForm(PasswordChangeForm):
         self.fields['new_password2'].label = '确认新密码'
         for field in self.fields.values():
             field.widget.attrs.setdefault('class', 'form-input')
+            field.widget.attrs.pop('autofocus', None)

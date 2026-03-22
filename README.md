@@ -24,7 +24,7 @@ python manage.py runserver 0.0.0.0:8000
 或者直接一键启动：
 
 ```bash
-./start.sh
+./start_mac.sh
 ```
 
 启动后访问：
@@ -41,33 +41,45 @@ http://127.0.0.1:8000/chat/login/
 daphne -b 0.0.0.0 -p 8000 websocket_project.asgi:application
 ```
 
-## Linux systemd 部署
+`start_mac.sh` 只用于本地测试，它会自动：
 
-项目内置了 `systemd` 安装脚本，可以自动生成服务并控制启停：
+- 创建或复用虚拟环境
+- 安装/更新 `requirements.txt` 依赖
+- 自动执行数据库迁移
+- 启动 Django 开发服务器
+
+`start.sh` 仍然保留，等价于执行 `./start_mac.sh`。
+
+## Linux 持续运行部署
+
+Linux 统一使用 `start_linux.sh`。
+
+首次执行下面这条即可完成完整服务部署并持续运行：
 
 ```bash
-chmod +x scripts/run_linux_service.sh scripts/systemd_service.sh
-./scripts/systemd_service.sh install
+chmod +x start_linux.sh scripts/service.sh scripts/run_linux_service.sh scripts/systemd_service.sh
+./start_linux.sh
 ```
 
 如果你希望服务以指定用户运行，例如 `www-data`：
 
 ```bash
-APP_USER=www-data APP_GROUP=www-data ./scripts/systemd_service.sh install
+APP_USER=www-data APP_GROUP=www-data ./start_linux.sh
 ```
 
 常用命令：
 
 ```bash
-./scripts/systemd_service.sh start
-./scripts/systemd_service.sh stop
-./scripts/systemd_service.sh restart
-./scripts/systemd_service.sh status
-./scripts/systemd_service.sh enable
-./scripts/systemd_service.sh disable
-./scripts/systemd_service.sh logs
-./scripts/systemd_service.sh config
-./scripts/systemd_service.sh uninstall
+./start_linux.sh start
+./start_linux.sh stop
+./start_linux.sh restart
+./start_linux.sh status
+./start_linux.sh enable
+./start_linux.sh disable
+./start_linux.sh logs
+./start_linux.sh config
+./start_linux.sh uninstall
+./start_linux.sh serve
 ```
 
 可选环境变量：
@@ -83,14 +95,19 @@ APP_MODULE=websocket_project.asgi:application
 MIGRATE_ON_START=1
 ```
 
-脚本会自动：
+`start_linux.sh` 默认会执行完整部署流程，脚本会自动：
 
 - 创建虚拟环境
-- 安装 `requirements.txt` 依赖
-- 执行数据库迁移
+- 在依赖变化时自动安装 `requirements.txt` 依赖
+- 启动前自动执行数据库迁移
 - 生成 `/etc/systemd/system/websocket-chat.service`
 - 生成 `/etc/default/websocket-chat`
 - 执行 `systemctl enable` 并启动服务
+
+兼容入口：
+
+- `scripts/systemd_service.sh` 等价于 `./start_linux.sh`
+- `scripts/run_linux_service.sh` 等价于 `./start_linux.sh serve`
 
 
 ## 当前最小依赖
