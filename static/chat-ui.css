@@ -1152,6 +1152,11 @@ select.form-input {
     flex-direction: column;
 }
 
+.app-hub-page {
+    height: 100dvh;
+    overflow: hidden;
+}
+
 .topbar {
     margin: 18px;
     padding: 16px 18px;
@@ -1266,8 +1271,10 @@ select.form-input {
     grid-template-columns: 92px 340px minmax(0, 1fr);
     gap: 18px;
     flex: 1;
+    min-height: 0;
     padding: 0 18px 18px;
     align-items: stretch;
+    overflow: hidden;
 }
 
 .module-rail {
@@ -1761,6 +1768,8 @@ select.form-input {
 
 .content-card-feed {
     align-content: start;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .inbox-chat-shell {

@@ -17,7 +17,7 @@
                 返回大厅
             </a>
             <div class="brand-title">
-                <strong>消息中心</strong>
+                <strong>申请与通知</strong>
             </div>
         </div>
         <div class="topbar-group">
@@ -40,59 +40,10 @@
         </div>
     {% endif %}
 
-    <main class="hub-layout">
+    <main class="social-layout">
         {% include 'chat/_module_rail.html' with active_section='lobby' include_lobby_entry=True %}
 
-        <aside class="sidebar-card panel-card room-browser-card">
-            <div class="room-list conversation-list">
-                {% if conversation_threads %}
-                    {% for item in conversation_threads %}
-                        <button
-                            type="button"
-                            class="thread-list-item unified-thread-item{% if active_thread and active_thread.type == item.type and active_thread.name == item.name %} active{% endif %}"
-                            data-thread-url="{{ item.embed_url }}"
-                            data-thread-name="{{ item.name }}"
-                            data-thread-type="{{ item.type }}"
-                        >
-                            <div class="thread-main">
-                                <div class="thread-topline">
-                                    <strong class="room-title">{{ item.name }}</strong>
-                                    {% if item.unread_count > 0 %}
-                                        <span class="thread-count">{{ item.unread_count }}</span>
-                                    {% endif %}
-                                </div>
-                                <div class="room-meta">
-                                    <span>{% if item.type == 'room' %}群聊{% else %}私聊{% endif %}</span>
-                                    <span>{{ item.last_message_at|date:"m-d H:i" }}</span>
-                                </div>
-                                <div class="thread-preview">{{ item.last_message_preview }}</div>
-                            </div>
-                        </button>
-                    {% endfor %}
-                {% else %}
-                    <div class="quick-action-card">
-                        <strong>还没有会话</strong>
-                        <p>进一个群聊发言，或者和好友开始聊天后，这里就会出现会话列表。</p>
-                    </div>
-                {% endif %}
-            </div>
-        </aside>
-
-        <section class="content-card panel-card content-card-feed inbox-chat-shell">
-            <div class="embedded-chat-wrap">
-                <iframe
-                    id="conversation-frame"
-                    class="conversation-frame{% if not active_thread %} is-hidden{% endif %}"
-                    {% if active_thread %}src="{{ active_thread.embed_url }}"{% endif %}
-                    title="{% if active_thread %}{{ active_thread.name }}{% else %}当前会话{% endif %}"
-                ></iframe>
-                <div class="empty-chat-shell{% if active_thread %} is-hidden{% endif %}" id="empty-chat-shell">
-                    <div class="empty-chat-card">
-                        <p>点左边任意一条会话会在这里展开，再点一次就会收起。</p>
-                    </div>
-                </div>
-            </div>
-
+        <section class="content-card panel-card content-card-feed">
             <div class="settings-section compact-section">
                 <div class="settings-section-head">
                     <strong>好友申请</strong>
@@ -134,58 +85,33 @@
                     {% endif %}
                 </div>
             </div>
+
+            {% if friend_requests_history %}
+                <div class="settings-section compact-section">
+                    <div class="settings-section-head">
+                        <strong>最近处理记录</strong>
+                        <span>保留最近处理过的好友申请状态。</span>
+                    </div>
+                    <div class="friend-grid">
+                        {% for item in friend_requests_history %}
+                            <div class="request-card">
+                                <div class="user-item-left">
+                                    <a href="{% url 'user_profile' item.sender.username %}" class="mini-avatar avatar-link">{{ item.sender.chat_profile.get_avatar_label|default:item.sender.username|slice:":2" }}</a>
+                                    <div>
+                                        <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.username %}">{{ item.sender.username }}</a></strong>
+                                        <div class="room-meta">
+                                            <span>好友 ID：{{ item.sender.chat_profile.friend_id }}</span>
+                                            <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                                            <span>{% if item.status == 'accepted' %}已通过{% else %}已拒绝{% endif %}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
         </section>
     </main>
-
-    <script>
-        const threadItems = Array.from(document.querySelectorAll('.unified-thread-item'));
-        const conversationFrame = document.getElementById('conversation-frame');
-        const emptyChatShell = document.getElementById('empty-chat-shell');
-        let activeThreadUrl = conversationFrame && conversationFrame.getAttribute('src')
-            ? conversationFrame.getAttribute('src')
-            : '';
-
-        function showEmptyState() {
-            activeThreadUrl = '';
-            threadItems.forEach((entry) => entry.classList.remove('active'));
-            if (conversationFrame) {
-                conversationFrame.removeAttribute('src');
-                conversationFrame.classList.add('is-hidden');
-                conversationFrame.title = '当前会话';
-            }
-            if (emptyChatShell) {
-                emptyChatShell.classList.remove('is-hidden');
-            }
-        }
-
-        function showThread(item) {
-            const threadUrl = item.dataset.threadUrl;
-            const threadName = item.dataset.threadName;
-
-            activeThreadUrl = threadUrl;
-            threadItems.forEach((entry) => entry.classList.remove('active'));
-            item.classList.add('active');
-
-            if (conversationFrame) {
-                conversationFrame.src = threadUrl;
-                conversationFrame.title = threadName;
-                conversationFrame.classList.remove('is-hidden');
-            }
-            if (emptyChatShell) {
-                emptyChatShell.classList.add('is-hidden');
-            }
-        }
-
-        threadItems.forEach((item) => {
-            item.addEventListener('click', () => {
-                const threadUrl = item.dataset.threadUrl;
-                if (activeThreadUrl === threadUrl && item.classList.contains('active')) {
-                    showEmptyState();
-                    return;
-                }
-                showThread(item);
-            });
-        });
-    </script>
 </body>
 </html>
