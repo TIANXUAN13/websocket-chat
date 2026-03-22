@@ -4,7 +4,7 @@ from urllib.parse import quote
 # chat/views.py
 from django.shortcuts import render, redirect
 from django.utils import timezone
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.password_validation import password_validators_help_text_html
@@ -22,7 +22,7 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError
 from django.db.utils import OperationalError, ProgrammingError
 from django.db.models import Q
-from .forms import AdminUserPasswordForm, RegistrationForm, SiteConfigurationForm
+from .forms import AdminUserPasswordForm, ProfilePasswordChangeForm, RegistrationForm, SiteConfigurationForm
 from .models import (
     DirectConversation,
     DirectConversationState,
@@ -547,34 +547,45 @@ def profile_settings(request):
         print(f"刷新用户地理位置时出错: {e}")
 
     chat_profile = get_or_create_chat_profile(request.user)
+    password_form = ProfilePasswordChangeForm(request.user)
 
     if request.method == 'POST':
-        requested_friend_id = request.POST.get('friend_id', '').strip().lower()
-        if requested_friend_id and UserChatProfile.objects.exclude(user=request.user).filter(friend_id=requested_friend_id).exists():
-            messages.error(request, '这个好友 ID 已经被别人使用了')
-            return redirect('profile_settings')
+        form_type = request.POST.get('form_type', 'profile')
+        if form_type == 'password':
+            password_form = ProfilePasswordChangeForm(request.user, request.POST)
+            if password_form.is_valid():
+                updated_user = password_form.save()
+                update_session_auth_hash(request, updated_user)
+                messages.success(request, '密码已更新')
+                return redirect('profile_settings')
+            messages.error(request, '密码修改失败，请检查输入内容')
+        else:
+            requested_friend_id = request.POST.get('friend_id', '').strip().lower()
+            if requested_friend_id and UserChatProfile.objects.exclude(user=request.user).filter(friend_id=requested_friend_id).exists():
+                messages.error(request, '这个好友 ID 已经被别人使用了')
+                return redirect('profile_settings')
 
-        if requested_friend_id and (len(requested_friend_id) < 8 or len(requested_friend_id) > 11):
-            messages.error(request, '好友 ID 长度需要在 8 到 11 位之间')
-            return redirect('profile_settings')
-        if requested_friend_id and not all(ch.isalnum() or ch == '_' for ch in requested_friend_id):
-            messages.error(request, '好友 ID 只能包含小写字母、数字或下划线')
-            return redirect('profile_settings')
+            if requested_friend_id and (len(requested_friend_id) < 8 or len(requested_friend_id) > 11):
+                messages.error(request, '好友 ID 长度需要在 8 到 11 位之间')
+                return redirect('profile_settings')
+            if requested_friend_id and not all(ch.isalnum() or ch == '_' for ch in requested_friend_id):
+                messages.error(request, '好友 ID 只能包含小写字母、数字或下划线')
+                return redirect('profile_settings')
 
-        chat_profile.friend_id = requested_friend_id or UserChatProfile.generate_unique_friend_id(
-            request.user.username,
-            exclude_user_id=request.user.id,
-        )
-        chat_profile.avatar_label = request.POST.get('avatar_label', '').strip()[:24]
-        chat_profile.bio = request.POST.get('bio', '').strip()[:160]
-        color_theme = request.POST.get('color_theme', DEFAULT_CHAT_THEME).strip()
-        bubble_style = request.POST.get('bubble_style', DEFAULT_CHAT_STYLE).strip()
-        chat_profile.color_theme = color_theme if color_theme in CHAT_COLOR_THEMES else DEFAULT_CHAT_THEME
-        chat_profile.bubble_style = bubble_style if bubble_style in CHAT_BUBBLE_STYLES else DEFAULT_CHAT_STYLE
-        chat_profile.show_location = request.POST.get('show_location') == 'on'
-        chat_profile.save(update_fields=['friend_id', 'avatar_label', 'bio', 'color_theme', 'bubble_style', 'show_location'])
-        messages.success(request, '个人聊天设置已更新')
-        return redirect('profile_settings')
+            chat_profile.friend_id = requested_friend_id or UserChatProfile.generate_unique_friend_id(
+                request.user.username,
+                exclude_user_id=request.user.id,
+            )
+            chat_profile.avatar_label = request.POST.get('avatar_label', '').strip()[:24]
+            chat_profile.bio = request.POST.get('bio', '').strip()[:160]
+            color_theme = request.POST.get('color_theme', DEFAULT_CHAT_THEME).strip()
+            bubble_style = request.POST.get('bubble_style', DEFAULT_CHAT_STYLE).strip()
+            chat_profile.color_theme = color_theme if color_theme in CHAT_COLOR_THEMES else DEFAULT_CHAT_THEME
+            chat_profile.bubble_style = bubble_style if bubble_style in CHAT_BUBBLE_STYLES else DEFAULT_CHAT_STYLE
+            chat_profile.show_location = request.POST.get('show_location') == 'on'
+            chat_profile.save(update_fields=['friend_id', 'avatar_label', 'bio', 'color_theme', 'bubble_style', 'show_location'])
+            messages.success(request, '个人聊天设置已更新')
+            return redirect('profile_settings')
 
     return render(request, 'chat/profile.html', {
         'chat_profile': chat_profile,
@@ -591,6 +602,8 @@ def profile_settings(request):
             status=FriendRequest.STATUS_PENDING,
         ).count(),
         'friendships': Friendship.objects.filter(user=request.user).select_related('friend', 'friend__chat_profile'),
+        'password_form': password_form,
+        'password_help_html': mark_safe(password_validators_help_text_html()),
     })
 
 

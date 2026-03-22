@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib.auth.forms import SetPasswordForm, UserCreationForm
+from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm, UserCreationForm
 from django.contrib.auth.models import User
 
 from .models import SiteConfiguration
@@ -75,3 +75,13 @@ class AdminUserPasswordForm(SetPasswordForm):
         super().__init__(*args, **kwargs)
         self.fields['new_password1'].label = '新密码'
         self.fields['new_password2'].label = '确认新密码'
+
+
+class ProfilePasswordChangeForm(PasswordChangeForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['old_password'].label = '当前密码'
+        self.fields['new_password1'].label = '新密码'
+        self.fields['new_password2'].label = '确认新密码'
+        for field in self.fields.values():
+            field.widget.attrs.setdefault('class', 'form-input')

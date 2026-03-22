@@ -77,6 +77,7 @@
         <section class="panel-card profile-settings-main">
             <form class="profile-settings-form profile-settings-grid" method="post">
                 {% csrf_token %}
+                <input type="hidden" name="form_type" value="profile">
                 <section class="settings-section">
                     <div class="settings-section-head">
                         <strong>个人信息</strong>
@@ -154,6 +155,46 @@
                     <button class="btn btn-primary" type="submit">保存个人设置</button>
                     <a href="{% url 'chat_index' %}" class="btn btn-secondary">返回大厅</a>
                 </div>
+            </form>
+
+            <form class="profile-settings-form profile-settings-grid profile-password-form" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="password">
+                <section class="settings-section">
+                    <div class="settings-section-head">
+                        <strong>账户安全</strong>
+                    </div>
+                    <div class="stack">
+                        <label class="field-label" for="{{ password_form.old_password.id_for_label }}">当前密码</label>
+                        {{ password_form.old_password }}
+                        {% if password_form.old_password.errors %}
+                            <ul class="errorlist">{% for error in password_form.old_password.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+                    <div class="settings-two-column">
+                        <div class="stack">
+                            <label class="field-label" for="{{ password_form.new_password1.id_for_label }}">新密码</label>
+                            {{ password_form.new_password1 }}
+                            {% if password_form.new_password1.errors %}
+                                <ul class="errorlist">{% for error in password_form.new_password1.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+                        <div class="stack">
+                            <label class="field-label" for="{{ password_form.new_password2.id_for_label }}">确认新密码</label>
+                            {{ password_form.new_password2 }}
+                            {% if password_form.new_password2.errors %}
+                                <ul class="errorlist">{% for error in password_form.new_password2.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if password_form.non_field_errors %}
+                        <ul class="errorlist">{% for error in password_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                    {% endif %}
+                    <div class="form-help">{{ password_help_html }}</div>
+                    <div class="profile-actions">
+                        <button class="btn btn-secondary" type="submit">更新密码</button>
+                    </div>
+                </section>
             </form>
         </section>
     </main>

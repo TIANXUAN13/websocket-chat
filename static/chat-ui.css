@@ -225,6 +225,17 @@ select.form-input {
     color: var(--text-body);
 }
 
+.form-help {
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.75;
+}
+
+.form-help ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+}
+
 .errorlist,
 .error-msg {
     list-style: none;
@@ -2747,6 +2758,10 @@ select.form-input {
     gap: 12px;
     flex-wrap: wrap;
     justify-content: flex-end;
+}
+
+.profile-password-form .profile-actions {
+    justify-content: flex-start;
 }
 
 .request-card,
