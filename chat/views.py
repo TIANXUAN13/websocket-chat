@@ -242,13 +242,18 @@ def build_room_threads(user):
     embed_version = '20260322n'
     for room in rooms:
         latest_message = room.messages.order_by('-timestamp').first()
-        if not latest_message:
-            continue
 
         state = get_or_create_room_visit_state(user, room)
         unread_qs = room.messages.exclude(user=user)
         if state.last_read_at:
             unread_qs = unread_qs.filter(timestamp__gt=state.last_read_at)
+
+        if latest_message:
+            last_message_preview = get_thread_preview_text(latest_message.message)
+            last_message_at = latest_message.timestamp
+        else:
+            last_message_preview = room.description or '新群聊已创建，来发第一条消息吧'
+            last_message_at = room.created_at
 
         threads.append({
             'type': 'room',
@@ -259,8 +264,8 @@ def build_room_threads(user):
             'embed_url': f"{reverse('chat_room', args=[room.name])}?embed=1&v={embed_version}",
             'inbox_url': f"{reverse('inbox')}?thread_type=room&target={quote(room.name)}",
             'unread_count': unread_qs.count(),
-            'last_message_preview': get_thread_preview_text(latest_message.message),
-            'last_message_at': latest_message.timestamp,
+            'last_message_preview': last_message_preview,
+            'last_message_at': last_message_at,
         })
 
     return sorted(threads, key=lambda item: item['last_message_at'], reverse=True)
@@ -611,6 +616,14 @@ def delete_room(request, room_name):
 @xframe_options_sameorigin
 def room(request, room_name):
     """具体聊天室页面"""
+    embed_mode = request.GET.get('embed') == '1'
+
+    def redirect_to_room(target_room_name):
+        target_url = reverse('chat_room', args=[target_room_name])
+        if embed_mode:
+            target_url = f'{target_url}?embed=1'
+        return redirect(target_url)
+
     try:
         room = Room.objects.get(name=room_name)
         room_membership = get_room_membership(room, request.user)
@@ -637,7 +650,7 @@ def room(request, room_name):
         if action == 'room_avatar':
             if not can_manage_room_avatar(room, request.user, room_membership):
                 messages.error(request, '只有房主或群管理员才能修改群头像')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
 
             next_avatar = request.POST.get('room_avatar', room.avatar).strip() or room.avatar
             if next_avatar not in DEFAULT_ROOM_AVATARS:
@@ -658,7 +671,7 @@ def room(request, room_name):
                     optimized_room_avatar = compress_room_avatar_upload(uploaded_room_avatar, room.name)
                 except ValueError as exc:
                     messages.error(request, str(exc))
-                    return redirect('chat_room', room_name=room.name)
+                    return redirect_to_room(room.name)
 
                 if room.avatar_image:
                     room.delete_avatar_image_file()
@@ -668,12 +681,12 @@ def room(request, room_name):
 
             room.save(update_fields=update_fields)
             messages.success(request, '群头像已更新')
-            return redirect('chat_room', room_name=room.name)
+            return redirect_to_room(room.name)
 
         if action == 'set_admin':
             if not is_owner:
                 messages.error(request, '只有房主才能设置群管理员')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
 
             target_username = request.POST.get('target_username', '').strip()
             try:
@@ -685,32 +698,32 @@ def room(request, room_name):
                 )
             except User.DoesNotExist:
                 messages.error(request, '目标成员不存在')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
 
             if room.created_by_id == target_user.id:
                 messages.error(request, '房主不需要设置为管理员')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
             if not target_membership.is_active:
                 messages.error(request, '只能设置仍在群内的成员为管理员')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
             if target_membership.is_admin:
                 messages.info(request, f'{target_username} 已经是群管理员')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
 
             admin_count = room.memberships.filter(is_active=True, is_admin=True).count()
             if admin_count >= MAX_ROOM_ADMIN_COUNT:
                 messages.error(request, f'群管理员最多只能设置 {MAX_ROOM_ADMIN_COUNT} 个')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
 
             target_membership.is_admin = True
             target_membership.save(update_fields=['is_admin'])
             messages.success(request, f'已将 {target_username} 设为群管理员')
-            return redirect('chat_room', room_name=room.name)
+            return redirect_to_room(room.name)
 
         if action == 'revoke_admin':
             if not is_owner:
                 messages.error(request, '只有房主才能取消群管理员')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
 
             target_username = request.POST.get('target_username', '').strip()
             try:
@@ -718,20 +731,20 @@ def room(request, room_name):
                 target_membership = RoomMembership.objects.get(room=room, user=target_user)
             except (User.DoesNotExist, RoomMembership.DoesNotExist):
                 messages.error(request, '目标管理员不存在')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
 
             if not target_membership.is_admin:
                 messages.info(request, f'{target_username} 目前不是群管理员')
-                return redirect('chat_room', room_name=room.name)
+                return redirect_to_room(room.name)
 
             target_membership.is_admin = False
             target_membership.save(update_fields=['is_admin'])
             messages.success(request, f'已取消 {target_username} 的群管理员身份')
-            return redirect('chat_room', room_name=room.name)
+            return redirect_to_room(room.name)
 
         if not is_owner:
             messages.error(request, '只有房主才能编辑房间资料')
-            return redirect('chat_room', room_name=room.name)
+            return redirect_to_room(room.name)
 
         new_room_name = request.POST.get('room_name', room.name).strip() or room.name
         room.description = request.POST.get('room_description', room.description).strip()[:120] or '一起聊聊吧'
@@ -741,9 +754,9 @@ def room(request, room_name):
             room.save()
         except IntegrityError:
             messages.error(request, '这个房间名已经被用了')
-            return redirect('chat_room', room_name=room_name)
+            return redirect_to_room(room_name)
         messages.success(request, '房间资料已更新')
-        return redirect('chat_room', room_name=room.name)
+        return redirect_to_room(room.name)
 
     chat_profile = get_or_create_chat_profile(request.user)
     room_membership = room_membership or get_room_membership(room, request.user)
@@ -755,8 +768,6 @@ def room(request, room_name):
         recipient=request.user,
         status=FriendRequest.STATUS_PENDING,
     ).count()
-    embed_mode = request.GET.get('embed') == '1'
-
     return render(request, 'chat/room.html', {
         'room': room,
         'room_avatars': DEFAULT_ROOM_AVATARS,
@@ -934,19 +945,25 @@ def inbox_summary(request):
         'total_unread_count': context['total_unread_count'],
         'room_threads': [
             {
+                'type': item['type'],
                 'name': item['name'],
                 'url': item['url'],
                 'unread_count': item['unread_count'],
+                'preview': item['last_message_preview'],
+                'timestamp': timezone.localtime(item['last_message_at']).strftime('%m-%d %H:%M') if item['last_message_at'] else '',
             }
             for item in context['room_threads']
         ],
         'direct_threads': [
             {
+                'type': item['type'],
                 'name': item['name'],
                 'url': item['url'],
                 'delete_url': item['delete_url'],
                 'friend_id': item['friend_id'],
                 'unread_count': item['unread_count'],
+                'preview': item['last_message_preview'],
+                'timestamp': timezone.localtime(item['last_message_at']).strftime('%m-%d %H:%M') if item['last_message_at'] else '',
             }
             for item in context['direct_threads']
         ],
@@ -1199,7 +1216,7 @@ def create_room_page(request):
                 )
                 get_or_create_room_membership(room, request.user)
                 messages.success(request, f'房间 "{room_name}" 创建成功')
-                return redirect('chat_room', room_name=room.name)
+                return redirect(f"{reverse('chat_index')}?thread_type=room&target={quote(room.name)}")
 
     return render(request, 'chat/create_room.html', {
         'chat_profile': get_or_create_chat_profile(request.user),

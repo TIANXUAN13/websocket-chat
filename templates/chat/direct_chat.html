@@ -222,6 +222,14 @@
         const otherAppearance = {{ other_profile_payload_json }};
         let activeDirectMessageElement = null;
         let directReplyDraftState = null;
+        let directSocket = null;
+        let directReconnectTimer = null;
+        let directReconnectAttempts = 0;
+        let directHeartbeatTimer = null;
+        let directHeartbeatTimeoutTimer = null;
+        let isDirectPageUnloading = false;
+        let directReconnectNoticeShown = false;
+        const directMessageSignatures = new Set();
 
         function toggleDirectSettings(forceState) {
             const shouldOpen = typeof forceState === 'boolean'
@@ -397,6 +405,15 @@
             const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
             const timeStr = timestamp.getHours().toString().padStart(2, '0') + ':' + timestamp.getMinutes().toString().padStart(2, '0');
             const normalizedMessage = typeof data.message === 'string' ? data.message : '';
+            const signature = [
+                data.user || '',
+                data.timestamp || timeStr || '',
+                normalizedMessage,
+            ].join('|');
+            if (directMessageSignatures.has(signature)) {
+                return;
+            }
+            directMessageSignatures.add(signature);
             const parsedMessage = parseQuotedMessage(normalizedMessage);
             msgDiv.dataset.messageUser = data.user || '';
             msgDiv.dataset.messageTime = timeStr;
@@ -441,25 +458,89 @@
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const directSocket = new WebSocket(protocol + '//' + window.location.host + '/ws/direct/' + encodeURIComponent(otherUsername) + '/');
+        const directSocketUrl = protocol + '//' + window.location.host + '/ws/direct/' + encodeURIComponent(otherUsername) + '/';
 
-        directSocket.addEventListener('open', function() {
+        function clearDirectHeartbeatTimers() {
+            window.clearInterval(directHeartbeatTimer);
+            window.clearTimeout(directHeartbeatTimeoutTimer);
+            directHeartbeatTimer = null;
+            directHeartbeatTimeoutTimer = null;
+        }
+
+        function startDirectHeartbeat() {
+            clearDirectHeartbeatTimers();
+            directHeartbeatTimer = window.setInterval(() => {
+                if (!directSocket || directSocket.readyState !== WebSocket.OPEN) {
+                    return;
+                }
+                directSocket.send(JSON.stringify({ type: 'ping' }));
+                window.clearTimeout(directHeartbeatTimeoutTimer);
+                directHeartbeatTimeoutTimer = window.setTimeout(() => {
+                    if (directSocket && directSocket.readyState === WebSocket.OPEN) {
+                        directSocket.close();
+                    }
+                }, 15000);
+            }, 25000);
+        }
+
+        function scheduleDirectReconnect() {
+            if (isDirectPageUnloading || directReconnectTimer) {
+                return;
+            }
+            const delay = Math.min(8000, 1000 * (2 ** directReconnectAttempts));
+            directReconnectAttempts += 1;
+            directReconnectTimer = window.setTimeout(() => {
+                directReconnectTimer = null;
+                connectDirectSocket();
+            }, delay);
+        }
+
+        function handleDirectSocketOpen() {
+            directReconnectAttempts = 0;
+            clearDirectHeartbeatTimers();
+            startDirectHeartbeat();
             updateDirectStatus(true);
+            if (directReconnectNoticeShown) {
+                directStatusText.textContent = '已重新连接';
+                directReconnectNoticeShown = false;
+            }
+            markDirectAsRead();
             directMessageInput.focus();
-        });
+        }
 
-        directSocket.addEventListener('message', function(event) {
+        function handleDirectSocketMessage(event) {
             const data = JSON.parse(event.data);
+            if (data.type === 'pong') {
+                window.clearTimeout(directHeartbeatTimeoutTimer);
+                directHeartbeatTimeoutTimer = null;
+                return;
+            }
             if (data.type !== 'chat') {
                 return;
             }
             appendDirectMessage(data);
             markDirectAsRead();
-        });
+        }
 
-        directSocket.addEventListener('close', function() {
+        function handleDirectSocketClose() {
+            clearDirectHeartbeatTimers();
             updateDirectStatus(false);
-        });
+            if (!isDirectPageUnloading) {
+                directStatusText.textContent = '重连中...';
+                directReconnectNoticeShown = true;
+            }
+            scheduleDirectReconnect();
+        }
+
+        function connectDirectSocket() {
+            if (directSocket && (directSocket.readyState === WebSocket.OPEN || directSocket.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            directSocket = new WebSocket(directSocketUrl);
+            directSocket.addEventListener('open', handleDirectSocketOpen);
+            directSocket.addEventListener('message', handleDirectSocketMessage);
+            directSocket.addEventListener('close', handleDirectSocketClose);
+        }
 
         directMessageContextMenu.addEventListener('click', async function(event) {
             const actionButton = event.target.closest('.message-context-action');
@@ -531,6 +612,11 @@
             const isMine = messageElement.classList.contains('mine');
             const bubble = messageElement.querySelector('.message-bubble');
             const parsedMessage = parseQuotedMessage(messageElement.dataset.messageContent || messageElement.querySelector('.msg-text')?.textContent || '');
+            directMessageSignatures.add([
+                messageElement.dataset.messageUser || '',
+                messageElement.dataset.messageTime || '',
+                messageElement.dataset.messageContent || '',
+            ].join('|'));
             if (bubble) {
                 const timeNode = bubble.querySelector('.msg-time');
                 bubble.innerHTML = `${renderMessageContent(parsedMessage)}${timeNode ? timeNode.outerHTML : ''}`;
@@ -553,6 +639,13 @@
             }
         });
 
+        window.addEventListener('beforeunload', function() {
+            isDirectPageUnloading = true;
+            clearDirectHeartbeatTimers();
+            window.clearTimeout(directReconnectTimer);
+        });
+
+        connectDirectSocket();
         scrollDirectMessagesToBottom();
         markDirectAsRead();
         const latestDirectMessageElement = Array.from(directMessageList.querySelectorAll('.message')).pop();

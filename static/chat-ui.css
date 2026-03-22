@@ -2130,7 +2130,7 @@ select.form-input {
 
 .room-layout {
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 18px;
     flex: 1;
     min-height: 0;

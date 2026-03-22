@@ -348,7 +348,7 @@
             button.addEventListener('click', () => activatePanel(button.dataset.panelTarget));
         });
 
-        const threadItems = Array.from(document.querySelectorAll('.unified-thread-item'));
+        let threadItems = Array.from(document.querySelectorAll('.unified-thread-item'));
         const conversationFrame = document.getElementById('conversation-frame');
         const emptyChatShell = document.getElementById('empty-chat-shell');
         const mobileThreadMedia = window.matchMedia('(max-width: 720px)');
@@ -488,6 +488,23 @@
             }
         }
 
+        function removeThreadItem(payload) {
+            if (!payload) return;
+            const matchedItem = threadItems.find((item) => (
+                (item.dataset.threadType || '') === (payload.threadType || '')
+                && (item.dataset.threadName || '') === (payload.threadName || '')
+            ));
+            if (!matchedItem) return;
+
+            const wasActive = matchedItem.classList.contains('active');
+            matchedItem.remove();
+            threadItems = threadItems.filter((item) => item !== matchedItem);
+
+            if (wasActive) {
+                showEmptyState();
+            }
+        }
+
         function toggleConversationSearch(forceState) {
             if (!conversationSearchShell || !conversationSearchTrigger) return;
             const shouldOpen = typeof forceState === 'boolean'
@@ -521,7 +538,11 @@
 
         const quickActionTrigger = document.getElementById('quick-action-trigger');
         const quickActionMenu = document.getElementById('quick-action-menu');
+        const inboxSummaryUrl = '{% url "inbox_summary" %}';
+        const inboxTriggerBadge = document.querySelector('.inbox-trigger .notification-badge');
         let quickActionHideTimer = null;
+        let threadSummarySyncTimer = null;
+        let isThreadSummarySyncing = false;
 
         function toggleQuickAction(forceState) {
             if (!quickActionMenu || !quickActionTrigger) return;
@@ -558,9 +579,83 @@
         window.addEventListener('message', (event) => {
             if (event.origin !== window.location.origin) return;
             const payload = event.data || {};
-            if (payload.type !== 'chat_thread_status') return;
-            updateThreadItemStatus(payload);
+            if (payload.type === 'chat_thread_status') {
+                updateThreadItemStatus(payload);
+                return;
+            }
+            if (payload.type === 'chat_thread_remove') {
+                removeThreadItem(payload);
+            }
         });
+
+        async function syncThreadListSummary() {
+            if (isThreadSummarySyncing) return;
+            isThreadSummarySyncing = true;
+            try {
+                const response = await fetch(inboxSummaryUrl, {
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+                if (!response.ok) {
+                    return;
+                }
+
+                const data = await response.json();
+                const nextItems = []
+                    .concat(data.room_threads || [])
+                    .concat(data.direct_threads || []);
+                const nextThreadKeys = new Set(
+                    nextItems.map((item) => `${item.type || ''}::${item.name || ''}`)
+                );
+
+                threadItems.slice().forEach((item) => {
+                    const threadKey = `${item.dataset.threadType || ''}::${item.dataset.threadName || ''}`;
+                    if (!nextThreadKeys.has(threadKey)) {
+                        removeThreadItem({
+                            threadType: item.dataset.threadType || '',
+                            threadName: item.dataset.threadName || '',
+                        });
+                    }
+                });
+
+                nextItems.forEach((item) => {
+                    updateThreadItemStatus({
+                        threadType: item.type || '',
+                        threadName: item.name || '',
+                        preview: item.preview || '',
+                        timestamp: item.timestamp || '',
+                        unreadCount: Number(item.unread_count || 0),
+                    });
+                });
+
+                if (inboxTriggerBadge) {
+                    const pendingCount = Number(data.pending_friend_requests_count || 0);
+                    inboxTriggerBadge.hidden = pendingCount <= 0;
+                    inboxTriggerBadge.textContent = pendingCount > 0 ? String(pendingCount) : '';
+                }
+            } catch (error) {
+                console.warn('同步会话摘要失败:', error);
+            } finally {
+                isThreadSummarySyncing = false;
+            }
+        }
+
+        function scheduleThreadListSummarySync() {
+            window.clearInterval(threadSummarySyncTimer);
+            threadSummarySyncTimer = window.setInterval(syncThreadListSummary, 8000);
+        }
+
+        window.addEventListener('focus', syncThreadListSummary);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                syncThreadListSummary();
+            }
+        });
+
+        syncThreadListSummary();
+        scheduleThreadListSummarySync();
     </script>
 </body>
 </html>

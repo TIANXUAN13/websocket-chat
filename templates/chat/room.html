@@ -273,14 +273,68 @@
         let hasShownRemovedAlert = false;
         let activeMessageElement = null;
         let replyDraftState = null;
+        let chatSocket = null;
+        let roomReconnectTimer = null;
+        let roomReconnectAttempts = 0;
+        let roomHeartbeatTimer = null;
+        let roomHeartbeatTimeoutTimer = null;
+        let roomConnectionNoticeShown = false;
+        let isRoomPageUnloading = false;
+        const roomMessageSignatures = new Set();
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = protocol + '//' + window.location.host + '/ws/chat/' + roomName + '/';
-        const chatSocket = new WebSocket(wsUrl);
         const loadMoreBtn = document.getElementById('load-more-btn');
         const loadMoreContainer = document.getElementById('load-more-container');
 
-        chatSocket.onopen = function() {
+        function buildMessageSignature(data, timeStr) {
+            return [
+                data.type || 'chat',
+                data.user || '',
+                data.timestamp || timeStr || '',
+                typeof data.message === 'string' ? data.message : '',
+            ].join('|');
+        }
+
+        function clearRoomHeartbeatTimers() {
+            window.clearInterval(roomHeartbeatTimer);
+            window.clearTimeout(roomHeartbeatTimeoutTimer);
+            roomHeartbeatTimer = null;
+            roomHeartbeatTimeoutTimer = null;
+        }
+
+        function startRoomHeartbeat() {
+            clearRoomHeartbeatTimers();
+            roomHeartbeatTimer = window.setInterval(() => {
+                if (!chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
+                    return;
+                }
+                chatSocket.send(JSON.stringify({ type: 'ping' }));
+                window.clearTimeout(roomHeartbeatTimeoutTimer);
+                roomHeartbeatTimeoutTimer = window.setTimeout(() => {
+                    if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                        chatSocket.close();
+                    }
+                }, 15000);
+            }, 25000);
+        }
+
+        function scheduleRoomReconnect() {
+            if (isRoomPageUnloading || roomReconnectTimer) {
+                return;
+            }
+            const delay = Math.min(8000, 1000 * (2 ** roomReconnectAttempts));
+            roomReconnectAttempts += 1;
+            roomReconnectTimer = window.setTimeout(() => {
+                roomReconnectTimer = null;
+                connectRoomSocket();
+            }, delay);
+        }
+
+        function handleRoomSocketOpen() {
+            roomReconnectAttempts = 0;
+            clearRoomHeartbeatTimers();
+            startRoomHeartbeat();
             setComposerEnabled(!isRemovedFromRoom);
             if (statusDot) {
                 statusDot.classList.add('connected');
@@ -291,6 +345,10 @@
             if (!isRemovedFromRoom) {
                 messageInput.focus();
             }
+            if (roomConnectionNoticeShown) {
+                appendMessage({ type: 'system', message: '连接已恢复。' });
+                roomConnectionNoticeShown = false;
+            }
 
             if (!isRemovedFromRoom) {
                 chatSocket.send(JSON.stringify({
@@ -298,11 +356,18 @@
                     'user': username,
                     'is_owner': isOwner
                 }));
+                markRoomAsRead();
             }
-        };
+        }
 
-        chatSocket.onmessage = function(e) {
+        function handleRoomSocketMessage(e) {
             const data = JSON.parse(e.data);
+
+            if (data.type === 'pong') {
+                window.clearTimeout(roomHeartbeatTimeoutTimer);
+                roomHeartbeatTimeoutTimer = null;
+                return;
+            }
 
             if (data.type === 'user_list') {
                 updateUserList(data.users);
@@ -330,6 +395,7 @@
             }
 
             if (data.type === 'delete_room') {
+                notifyParentThreadRemoved();
                 alert('房间已被房主删除');
                 window.location.href = '/chat/';
                 return;
@@ -345,7 +411,7 @@
                     syncParentThreadStatusFromElement(latestMessageElement);
                 });
             }
-        };
+        }
 
         async function markRoomAsRead() {
             try {
@@ -465,6 +531,15 @@
             }, window.location.origin);
         }
 
+        function notifyParentThreadRemoved() {
+            if (window.parent === window || !window.parent) return;
+            window.parent.postMessage({
+                type: 'chat_thread_remove',
+                threadType: 'room',
+                threadName: roomName,
+            }, window.location.origin);
+        }
+
         function syncParentThreadStatusFromElement(messageElement) {
             if (!messageElement || messageElement.classList.contains('system') || messageElement.classList.contains('kick') || messageElement.classList.contains('delete-room')) {
                 return;
@@ -512,6 +587,11 @@
             const date = data.timestamp ? new Date(data.timestamp) : fallbackTime || new Date();
             const timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
             const normalizedMessage = typeof data.message === 'string' ? data.message : '';
+            const signature = buildMessageSignature(data, timeStr);
+            if (roomMessageSignatures.has(signature)) {
+                return;
+            }
+            roomMessageSignatures.add(signature);
             const parsedMessage = parseQuotedMessage(normalizedMessage);
             msgDiv.dataset.messageUser = data.user || '';
             msgDiv.dataset.messageTime = timeStr;
@@ -916,17 +996,32 @@
             settingsOverlay.classList.toggle('open', shouldOpen);
         }
 
-        chatSocket.onclose = function() {
+        function handleRoomSocketClose() {
+            clearRoomHeartbeatTimers();
             messageInput.disabled = true;
             sendBtn.disabled = true;
             if (statusDot) {
                 statusDot.classList.remove('connected');
             }
             if (statusText) {
-                statusText.textContent = '已断开';
+                statusText.textContent = '重连中...';
             }
-            appendMessage({ type: 'system', message: '连接已断开，请刷新页面重试。' });
-        };
+            if (!isRoomPageUnloading && !roomConnectionNoticeShown) {
+                appendMessage({ type: 'system', message: '连接暂时断开，正在尝试重连...' });
+                roomConnectionNoticeShown = true;
+            }
+            scheduleRoomReconnect();
+        }
+
+        function connectRoomSocket() {
+            if (chatSocket && (chatSocket.readyState === WebSocket.OPEN || chatSocket.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            chatSocket = new WebSocket(wsUrl);
+            chatSocket.onopen = handleRoomSocketOpen;
+            chatSocket.onmessage = handleRoomSocketMessage;
+            chatSocket.onclose = handleRoomSocketClose;
+        }
 
         function sendMessage() {
             const message = messageInput.value.trim();
@@ -984,6 +1079,9 @@
         });
 
         window.addEventListener('beforeunload', function() {
+            isRoomPageUnloading = true;
+            clearRoomHeartbeatTimers();
+            window.clearTimeout(roomReconnectTimer);
             if (chatSocket.readyState === WebSocket.OPEN) {
                 chatSocket.send(JSON.stringify({
                     'type': 'leave',
@@ -992,6 +1090,7 @@
             }
         });
 
+        connectRoomSocket();
         requestPreciseLocation();
         markRoomAsRead();
         updateUserList(currentOnlineUsers);

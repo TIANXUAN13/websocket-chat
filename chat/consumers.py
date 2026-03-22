@@ -90,6 +90,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         if msg_type == 'chat':
             await self.handle_chat(data)
+        elif msg_type == 'ping':
+            await self.send(text_data=json.dumps({
+                'type': 'pong',
+            }))
         elif msg_type == 'join':
             await self.handle_join(data)
         elif msg_type == 'leave':
@@ -638,7 +642,14 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
         except json.JSONDecodeError:
             return
 
-        if payload.get('type') != 'chat':
+        payload_type = payload.get('type')
+        if payload_type == 'ping':
+            await self.send(text_data=json.dumps({
+                'type': 'pong',
+            }))
+            return
+
+        if payload_type != 'chat':
             return
 
         message = (payload.get('message') or '').strip()
