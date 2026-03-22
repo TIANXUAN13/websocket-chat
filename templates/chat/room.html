@@ -4,7 +4,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ room_name }} - 聊天室</title>
+    <title>{{ room_name }} - {{ site_title }}</title>
+    {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
     <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322copy3">
     <script>
         window.codexShowCopyToast = function(message, isError) {

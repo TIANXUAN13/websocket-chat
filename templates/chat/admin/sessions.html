@@ -10,10 +10,38 @@
 </div>
 
 <div class="section panel-card">
+        <div class="admin-section-head">
+            <div>
+                <h2>会话列表</h2>
+                <p>支持分页、每页数量切换，以及批量删除异常或过期的登录会话。</p>
+            </div>
+            <form method="get" class="admin-inline-form">
+                <label class="field-label" for="page_size">每页显示</label>
+                <select class="form-input admin-page-size-select" id="page_size" name="page_size" onchange="this.form.submit()">
+                    {% for option in admin_page_size_options %}
+                        <option value="{{ option }}" {% if page_size == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        <form method="post" class="stack">
+            {% csrf_token %}
+            <input type="hidden" name="page" value="{{ sessions_page.number }}">
+            <input type="hidden" name="page_size" value="{{ page_size }}">
+            <div class="admin-bulk-toolbar">
+                <label class="table-select-all">
+                    <input type="checkbox" data-select-all="sessions">
+                    <span>全选本页</span>
+                </label>
+                <div class="action-buttons">
+                    <button type="submit" name="action" value="bulk_delete" class="btn btn-danger btn-sm" onclick="return confirm('确定要批量删除所选会话吗？这会强制对应用户重新登录。')">批量删除会话</button>
+                </div>
+            </div>
         <div class="table-container">
             <table class="admin-table">
                 <thead>
                     <tr>
+                        <th class="checkbox-col"></th>
                         <th>用户</th>
                         <th>会话键</th>
                         <th>创建时间</th>
@@ -21,8 +49,11 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for session in sessions %}
+                    {% for session in sessions_page %}
                     <tr>
+                        <td class="checkbox-col">
+                            <input type="checkbox" name="selected_sessions" value="{{ session.id }}" data-select-item="sessions">
+                        </td>
                         <td>{{ session.user.username }}</td>
                         <td>
                             <code>{{ session.session_key }}</code>
@@ -41,11 +72,34 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="4">暂无活跃会话</td>
+                        <td colspan="5">暂无活跃会话</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+        </form>
+        <div class="admin-pagination">
+            <span>第 {{ sessions_page.number }}/{{ sessions_page.paginator.num_pages }} 页，共 {{ sessions_page.paginator.count }} 个会话</span>
+            <div class="action-buttons">
+                {% if sessions_page.has_previous %}
+                    <a class="btn btn-secondary btn-sm" href="?page={{ sessions_page.previous_page_number }}&page_size={{ page_size }}">上一页</a>
+                {% endif %}
+                {% if sessions_page.has_next %}
+                    <a class="btn btn-secondary btn-sm" href="?page={{ sessions_page.next_page_number }}&page_size={{ page_size }}">下一页</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
+
+<script>
+    const sessionMasterCheckbox = document.querySelector('[data-select-all="sessions"]');
+    if (sessionMasterCheckbox) {
+        sessionMasterCheckbox.addEventListener('change', () => {
+            document.querySelectorAll('[data-select-item="sessions"]').forEach((item) => {
+                item.checked = sessionMasterCheckbox.checked;
+            });
+        });
+    }
+</script>
 {% endblock %}

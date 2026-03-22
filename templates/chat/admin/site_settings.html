@@ -12,7 +12,7 @@
 <div class="admin-sections">
     <div class="section panel-card">
         <h2>跨域与来源设置</h2>
-        <form method="post" class="stack">
+        <form method="post" enctype="multipart/form-data" class="stack">
             {% csrf_token %}
             {% for field in form %}
                 <div class="stack">
@@ -26,6 +26,12 @@
                     {% endfor %}
                 </div>
             {% endfor %}
+            {% if site_favicon_url %}
+                <div class="stack">
+                    <label class="field-label">当前网页图标</label>
+                    <img src="{{ site_favicon_url }}" alt="当前网页图标" style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid rgba(104, 74, 52, 0.12); background: rgba(255,255,255,0.8);">
+                </div>
+            {% endif %}
             <button type="submit" class="btn btn-primary">保存设置</button>
         </form>
     </div>

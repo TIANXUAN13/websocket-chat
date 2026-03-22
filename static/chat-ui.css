@@ -3360,6 +3360,24 @@ select.form-input {
     font-size: 1.2rem;
 }
 
+.admin-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.admin-section-head h2 {
+    margin: 0 0 6px;
+}
+
+.admin-section-head p {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: 1.7;
+}
+
 .nav-links {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -3378,6 +3396,20 @@ select.form-input {
 
 .table-container {
     overflow-x: auto;
+}
+
+.admin-inline-form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.admin-page-size-select {
+    width: 96px;
+    min-width: 96px;
+    padding-top: 10px;
+    padding-bottom: 10px;
 }
 
 .admin-table {
@@ -3428,6 +3460,27 @@ select.form-input {
     margin-bottom: 18px;
 }
 
+.admin-bulk-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.table-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-body);
+    font-weight: 700;
+}
+
+.checkbox-col {
+    width: 48px;
+}
+
 .action-buttons {
     display: flex;
     flex-wrap: wrap;
@@ -3438,6 +3491,17 @@ select.form-input {
     padding: 8px 12px;
     border-radius: 999px;
     font-size: 12px;
+}
+
+.admin-pagination {
+    margin-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    color: var(--text-muted);
+    font-size: 14px;
 }
 
 .message {

@@ -24,6 +24,7 @@ from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.core.files.base import ContentFile
+from django.core.paginator import Paginator
 from django.contrib.sessions.models import Session
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -86,6 +87,30 @@ def get_thread_preview_text(message_text, limit=36):
         raw = '引用消息'
 
     return raw[:limit]
+
+
+ADMIN_PAGE_SIZE_OPTIONS = (10, 20, 50, 100)
+
+
+def get_admin_page_size(request, key, default=10):
+    raw_value = request.GET.get(key, default)
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        value = default
+    if value not in ADMIN_PAGE_SIZE_OPTIONS:
+        return default
+    return value
+
+
+def build_admin_list_redirect_url(view_name, request, page_key='page', page_size_key='page_size', default_page_size='10', extra_params=None):
+    params = {
+        page_key: request.POST.get(page_key) or request.GET.get(page_key) or '1',
+        page_size_key: request.POST.get(page_size_key) or request.GET.get(page_size_key) or default_page_size,
+    }
+    if extra_params:
+        params.update(extra_params)
+    return f"{reverse(view_name)}?{urlencode(params)}"
 
 
 def notify_user_presence_changed(user):
@@ -1681,22 +1706,10 @@ def admin_dashboard(request):
     total_rooms = Room.objects.count()
     total_sessions = UserSession.objects.count()
     
-    # 获取最近注册的用户
-    recent_users = User.objects.order_by('-date_joined')[:10]
-    
-    # 获取所有房间
-    rooms = Room.objects.all()
-    
-    # 获取所有用户会话
-    user_sessions = UserSession.objects.select_related('user').all()
-    
     context = {
         'total_users': total_users,
         'total_rooms': total_rooms,
         'total_sessions': total_sessions,
-        'recent_users': recent_users,
-        'rooms': rooms,
-        'user_sessions': user_sessions,
         'site_config': SiteConfiguration.get_solo(),
     }
     
@@ -1706,7 +1719,41 @@ def admin_dashboard(request):
 @user_passes_test(is_admin_user)
 def admin_users(request):
     """用户管理"""
-    users = User.objects.all()
+    if request.method == 'POST':
+        action = request.POST.get('action', '').strip()
+        if action == 'bulk_toggle_active':
+            user_ids = request.POST.getlist('selected_users')
+            affected = 0
+            for user in User.objects.filter(id__in=user_ids).exclude(id=request.user.id):
+                user.is_active = not user.is_active
+                user.save(update_fields=['is_active'])
+                affected += 1
+            messages.success(request, f'已批量切换 {affected} 个用户的激活状态')
+            return redirect(build_admin_list_redirect_url('admin_users', request))
+
+        if action == 'bulk_toggle_superuser':
+            user_ids = request.POST.getlist('selected_users')
+            affected = 0
+            for user in User.objects.filter(id__in=user_ids).exclude(id=request.user.id):
+                next_value = not user.is_superuser
+                user.is_superuser = next_value
+                user.is_staff = next_value
+                user.save(update_fields=['is_superuser', 'is_staff'])
+                affected += 1
+            messages.success(request, f'已批量更新 {affected} 个用户的管理员状态')
+            return redirect(build_admin_list_redirect_url('admin_users', request))
+
+        if action == 'bulk_delete':
+            user_ids = request.POST.getlist('selected_users')
+            users_to_delete = User.objects.filter(id__in=user_ids).exclude(id=request.user.id)
+            affected = 0
+            for user in users_to_delete:
+                UserSession.objects.filter(user=user).delete()
+                Room.objects.filter(created_by=user).update(created_by=None)
+                user.delete()
+                affected += 1
+            messages.success(request, f'已批量删除 {affected} 个用户')
+            return redirect(build_admin_list_redirect_url('admin_users', request, extra_params={'page': '1'}))
     
     if request.method == 'POST':
         user_id = request.POST.get('user_id')
@@ -1733,14 +1780,30 @@ def admin_users(request):
             except User.DoesNotExist:
                 messages.error(request, '用户不存在')
         
-        return redirect('admin_users')
-    
-    return render(request, 'chat/admin/users.html', {'users': users})
+        return redirect(build_admin_list_redirect_url('admin_users', request))
+
+    page_size = get_admin_page_size(request, 'page_size', default=10)
+    users = User.objects.order_by('-date_joined', '-id')
+    paginator = Paginator(users, page_size)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    return render(request, 'chat/admin/users.html', {
+        'users_page': page_obj,
+        'page_size': page_size,
+        'admin_page_size_options': ADMIN_PAGE_SIZE_OPTIONS,
+    })
 
 
 @user_passes_test(is_admin_user)
 def admin_rooms(request):
     """房间管理"""
+    if request.method == 'POST' and request.POST.get('action') == 'bulk_delete':
+        room_ids = request.POST.getlist('selected_rooms')
+        affected = Room.objects.filter(id__in=room_ids).count()
+        Room.objects.filter(id__in=room_ids).delete()
+        messages.success(request, f'已批量删除 {affected} 个房间')
+        return redirect(build_admin_list_redirect_url('admin_rooms', request, extra_params={'page': '1'}))
+
     rooms = Room.objects.select_related('created_by').all()
     
     if request.method == 'POST':
@@ -1756,14 +1819,29 @@ def admin_rooms(request):
             except Room.DoesNotExist:
                 messages.error(request, '房间不存在')
         
-        return redirect('admin_rooms')
-    
-    return render(request, 'chat/admin/rooms.html', {'rooms': rooms})
+        return redirect(build_admin_list_redirect_url('admin_rooms', request))
+
+    page_size = get_admin_page_size(request, 'page_size', default=10)
+    paginator = Paginator(rooms.order_by('-created_at', '-id'), page_size)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    return render(request, 'chat/admin/rooms.html', {
+        'rooms_page': page_obj,
+        'page_size': page_size,
+        'admin_page_size_options': ADMIN_PAGE_SIZE_OPTIONS,
+    })
 
 
 @user_passes_test(is_admin_user)
 def admin_sessions(request):
     """会话管理"""
+    if request.method == 'POST' and request.POST.get('action') == 'bulk_delete':
+        session_ids = request.POST.getlist('selected_sessions')
+        affected = UserSession.objects.filter(id__in=session_ids).count()
+        UserSession.objects.filter(id__in=session_ids).delete()
+        messages.success(request, f'已批量删除 {affected} 个会话')
+        return redirect(build_admin_list_redirect_url('admin_sessions', request, extra_params={'page': '1'}))
+
     sessions = UserSession.objects.select_related('user').all()
     
     if request.method == 'POST':
@@ -1779,9 +1857,17 @@ def admin_sessions(request):
             except UserSession.DoesNotExist:
                 messages.error(request, '会话不存在')
         
-        return redirect('admin_sessions')
-    
-    return render(request, 'chat/admin/sessions.html', {'sessions': sessions})
+        return redirect(build_admin_list_redirect_url('admin_sessions', request))
+
+    page_size = get_admin_page_size(request, 'page_size', default=10)
+    paginator = Paginator(sessions.order_by('-created_at', '-id'), page_size)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    return render(request, 'chat/admin/sessions.html', {
+        'sessions_page': page_obj,
+        'page_size': page_size,
+        'admin_page_size_options': ADMIN_PAGE_SIZE_OPTIONS,
+    })
 
 
 @user_passes_test(is_admin_user)
@@ -1814,10 +1900,10 @@ def admin_site_settings(request):
         messages.error(request, '当前数据库尚未完成站点配置初始化，请先执行 migrate')
         return redirect('admin_dashboard')
 
-    form = SiteConfigurationForm(request.POST or None, instance=site_config)
+    form = SiteConfigurationForm(request.POST or None, request.FILES or None, instance=site_config)
     if request.method == 'POST' and form.is_valid():
         form.save()
-        messages.success(request, '站点设置已更新，新的受信任来源会在后续请求中生效')
+        messages.success(request, '站点设置已更新，新的标题、图标和来源配置会在后续请求中生效')
         return redirect('admin_site_settings')
 
     return render(request, 'chat/admin/site_settings.html', {

@@ -10,10 +10,38 @@
 </div>
 
 <div class="section panel-card">
+        <div class="admin-section-head">
+            <div>
+                <h2>房间列表</h2>
+                <p>支持每页数量切换、分页浏览，以及批量删除选中的房间。</p>
+            </div>
+            <form method="get" class="admin-inline-form">
+                <label class="field-label" for="page_size">每页显示</label>
+                <select class="form-input admin-page-size-select" id="page_size" name="page_size" onchange="this.form.submit()">
+                    {% for option in admin_page_size_options %}
+                        <option value="{{ option }}" {% if page_size == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        <form method="post" class="stack">
+            {% csrf_token %}
+            <input type="hidden" name="page" value="{{ rooms_page.number }}">
+            <input type="hidden" name="page_size" value="{{ page_size }}">
+            <div class="admin-bulk-toolbar">
+                <label class="table-select-all">
+                    <input type="checkbox" data-select-all="rooms">
+                    <span>全选本页</span>
+                </label>
+                <div class="action-buttons">
+                    <button type="submit" name="action" value="bulk_delete" class="btn btn-danger btn-sm" onclick="return confirm('确定要批量删除所选房间吗？此操作不可撤销。')">批量删除房间</button>
+                </div>
+            </div>
         <div class="table-container">
             <table class="admin-table">
                 <thead>
                     <tr>
+                        <th class="checkbox-col"></th>
                         <th>房间名称</th>
                         <th>创建者</th>
                         <th>创建时间</th>
@@ -21,8 +49,11 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for room in rooms %}
+                    {% for room in rooms_page %}
                     <tr>
+                        <td class="checkbox-col">
+                            <input type="checkbox" name="selected_rooms" value="{{ room.id }}" data-select-item="rooms">
+                        </td>
                         <td><a href="{% url 'chat_room' room.name %}">{{ room.name }}</a></td>
                         <td>{{ room.created_by.username|default:"系统" }}</td>
                         <td>{{ room.created_at|date:"Y-m-d H:i" }}</td>
@@ -39,11 +70,34 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="4">暂无房间数据</td>
+                        <td colspan="5">暂无房间数据</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+        </form>
+        <div class="admin-pagination">
+            <span>第 {{ rooms_page.number }}/{{ rooms_page.paginator.num_pages }} 页，共 {{ rooms_page.paginator.count }} 个房间</span>
+            <div class="action-buttons">
+                {% if rooms_page.has_previous %}
+                    <a class="btn btn-secondary btn-sm" href="?page={{ rooms_page.previous_page_number }}&page_size={{ page_size }}">上一页</a>
+                {% endif %}
+                {% if rooms_page.has_next %}
+                    <a class="btn btn-secondary btn-sm" href="?page={{ rooms_page.next_page_number }}&page_size={{ page_size }}">下一页</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
+
+<script>
+    const roomMasterCheckbox = document.querySelector('[data-select-all="rooms"]');
+    if (roomMasterCheckbox) {
+        roomMasterCheckbox.addEventListener('change', () => {
+            document.querySelectorAll('[data-select-item="rooms"]').forEach((item) => {
+                item.checked = roomMasterCheckbox.checked;
+            });
+        });
+    }
+</script>
 {% endblock %}

@@ -10,10 +10,40 @@
 </div>
 
 <div class="section panel-card">
+        <div class="admin-section-head">
+            <div>
+                <h2>用户列表</h2>
+                <p>支持分页浏览、每页数量切换，以及批量启用、批量设为管理员和批量删除。</p>
+            </div>
+            <form method="get" class="admin-inline-form">
+                <label class="field-label" for="page_size">每页显示</label>
+                <select class="form-input admin-page-size-select" id="page_size" name="page_size" onchange="this.form.submit()">
+                    {% for option in admin_page_size_options %}
+                        <option value="{{ option }}" {% if page_size == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        <form method="post" class="stack">
+            {% csrf_token %}
+            <input type="hidden" name="page" value="{{ users_page.number }}">
+            <input type="hidden" name="page_size" value="{{ page_size }}">
+            <div class="admin-bulk-toolbar">
+                <label class="table-select-all">
+                    <input type="checkbox" data-select-all="users">
+                    <span>全选本页</span>
+                </label>
+                <div class="action-buttons">
+                    <button type="submit" name="action" value="bulk_toggle_active" class="btn btn-warning btn-sm">批量切换激活</button>
+                    <button type="submit" name="action" value="bulk_toggle_superuser" class="btn btn-sm">批量切换管理员</button>
+                    <button type="submit" name="action" value="bulk_delete" class="btn btn-danger btn-sm" onclick="return confirm('确定要批量删除所选用户吗？此操作不可撤销。')">批量删除</button>
+                </div>
+            </div>
         <div class="table-container">
             <table class="admin-table">
                 <thead>
                     <tr>
+                        <th class="checkbox-col"></th>
                         <th>用户名</th>
                         <th>邮箱</th>
                         <th>地理位置</th>
@@ -25,8 +55,13 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for user in users %}
+                    {% for user in users_page %}
                     <tr>
+                        <td class="checkbox-col">
+                            {% if user.id != request.user.id %}
+                                <input type="checkbox" name="selected_users" value="{{ user.id }}" data-select-item="users">
+                            {% endif %}
+                        </td>
                         <td>{{ user.username }}</td>
                         <td>{{ user.email|default:"-" }}</td>
                         <td>
@@ -86,11 +121,34 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8">暂无用户数据</td>
+                        <td colspan="9">暂无用户数据</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+        </form>
+        <div class="admin-pagination">
+            <span>第 {{ users_page.number }}/{{ users_page.paginator.num_pages }} 页，共 {{ users_page.paginator.count }} 个用户</span>
+            <div class="action-buttons">
+                {% if users_page.has_previous %}
+                    <a class="btn btn-secondary btn-sm" href="?page={{ users_page.previous_page_number }}&page_size={{ page_size }}">上一页</a>
+                {% endif %}
+                {% if users_page.has_next %}
+                    <a class="btn btn-secondary btn-sm" href="?page={{ users_page.next_page_number }}&page_size={{ page_size }}">下一页</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
+
+<script>
+    const userMasterCheckbox = document.querySelector('[data-select-all="users"]');
+    if (userMasterCheckbox) {
+        userMasterCheckbox.addEventListener('change', () => {
+            document.querySelectorAll('[data-select-item="users"]').forEach((item) => {
+                item.checked = userMasterCheckbox.checked;
+            });
+        });
+    }
+</script>
 {% endblock %}

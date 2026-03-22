@@ -4,7 +4,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>个人设置</title>
+    <title>个人设置 - {{ site_title }}</title>
+    {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
     <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322copy2">
     <script>
         window.codexShowCopyToast = function(message, isError) {
@@ -133,10 +134,7 @@
                 </div>
                 <div class="profile-hint profile-hint-compact">
                     <strong>当前好友 ID</strong>
-                    <button class="copy-chip copy-chip-block" type="button" data-copy-text="{{ chat_profile.friend_id }}" data-copy-success="好友 ID 已复制" onclick="return window.codexHandleCopyClick(this)">
-                        <span>{{ chat_profile.friend_id }}</span>
-                        <span class="copy-chip-status">点击复制</span>
-                    </button>
+                    <span>{{ chat_profile.friend_id }}</span>
                 </div>
             </div>
 

@@ -39,17 +39,22 @@ class RegistrationForm(UserCreationForm):
 class SiteConfigurationForm(forms.ModelForm):
     class Meta:
         model = SiteConfiguration
-        fields = ('trusted_origins', 'cors_allowed_origins', 'allow_all_cors')
+        fields = ('site_title', 'site_favicon', 'trusted_origins', 'cors_allowed_origins', 'allow_all_cors')
         widgets = {
+            'site_title': forms.TextInput(attrs={'placeholder': '例如：animal chat'}),
             'trusted_origins': forms.Textarea(attrs={'rows': 6, 'placeholder': '每行一个来源，例如：https://chat.6143443.xyz'}),
             'cors_allowed_origins': forms.Textarea(attrs={'rows': 6, 'placeholder': '每行一个来源，例如：https://app.example.com'}),
         }
         labels = {
+            'site_title': '网页标题',
+            'site_favicon': '网页图标',
             'trusted_origins': 'CSRF 受信任来源',
             'cors_allowed_origins': 'CORS 允许来源',
             'allow_all_cors': '允许所有跨域来源',
         }
         help_texts = {
+            'site_title': '浏览器标签页显示的标题，留空时默认使用 animal chat。',
+            'site_favicon': '支持 PNG、JPG、ICO、WebP。上传后会显示在浏览器标签页。',
             'trusted_origins': '用于 Django 的 CSRF Origin 校验。需要带协议头，例如 https://example.com',
             'cors_allowed_origins': '用于响应头 Access-Control-Allow-Origin。需要带协议头，例如 https://example.com',
             'allow_all_cors': '开发调试时可以开启；生产环境建议关闭并只填写明确来源。',
