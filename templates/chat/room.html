@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ room_name }} - 聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322s">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322u">
 </head>
 <body class="room-page{% if embed_mode %} embed-chat-page{% endif %}">
     {% if not embed_mode %}
@@ -15,7 +15,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M19 12H5M12 19l-7-7 7-7"/>
                 </svg>
-                返回大厅
+                <span class="back-link-label">返回大厅</span>
             </a>
             <div class="room-identity">
                 <div class="room-glyph room-avatar room-avatar-large">{{ room.avatar }}</div>
@@ -171,8 +171,14 @@
             </div>
 
             <div class="chat-input-area">
-                <input class="form-input" type="text" id="message-input" placeholder="输入消息，按 Enter 发送..." disabled>
-                <button class="btn btn-primary" id="send-btn" disabled>发送消息</button>
+                <input class="form-input" type="text" id="message-input" placeholder="输入消息..." disabled>
+                <button class="btn btn-primary send-btn-compact" id="send-btn" disabled aria-label="发送消息">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13"/>
+                        <path d="M22 2L15 22l-4-9-9-4 20-7z"/>
+                    </svg>
+                    <span class="send-btn-label">发送消息</span>
+                </button>
             </div>
         </section>
     </main>
