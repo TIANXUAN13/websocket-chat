@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322s">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322x">
 </head>
 <body class="lobby-page app-hub-page">
     <header class="topbar panel-card">
@@ -77,6 +77,21 @@
     <main class="hub-layout">
         {% include 'chat/_module_rail.html' with active_section='lobby' include_lobby_entry=True use_buttons=True %}
         <aside class="sidebar-card panel-card room-browser-card panel-switch active" data-panel="lobby">
+            <div class="sidebar-heading sidebar-heading-search">
+                <div>
+                    <strong>聊天消息</strong>
+                    <span>搜索会话名或消息预览。</span>
+                </div>
+                <div class="conversation-search-shell" id="conversation-search-shell">
+                    <button class="settings-trigger search-trigger" type="button" id="conversation-search-trigger" aria-label="搜索聊天列表" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <path d="M20 20l-3.5-3.5"></path>
+                        </svg>
+                    </button>
+                    <input class="form-input conversation-search-input" id="conversation-search" type="search" placeholder="搜索聊天..." autocomplete="off">
+                </div>
+            </div>
             <div class="room-list conversation-list">
                 {% if conversation_threads %}
                     {% for item in conversation_threads %}
@@ -88,6 +103,7 @@
                             data-thread-name="{{ item.name }}"
                             data-thread-type="{{ item.type }}"
                             data-thread-target="{{ item.name }}"
+                            data-thread-preview="{{ item.last_message_preview }}"
                         >
                             <div class="thread-main">
                                 <div class="thread-topline">
@@ -233,10 +249,11 @@
     </main>
 
     <script>
-        const roomSearchInput = document.getElementById('room-search');
-        const roomCards = Array.from(document.querySelectorAll('.room-card[data-room-name]'));
         const panelSwitchButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
         const panelSwitchPanels = Array.from(document.querySelectorAll('.panel-switch'));
+        const conversationSearchShell = document.getElementById('conversation-search-shell');
+        const conversationSearchTrigger = document.getElementById('conversation-search-trigger');
+        const conversationSearchInput = document.getElementById('conversation-search');
         const welcomeVariants = [
             {
                 label: '欢迎回来',
@@ -316,18 +333,6 @@
         panelSwitchButtons.forEach((button) => {
             button.addEventListener('click', () => activatePanel(button.dataset.panelTarget));
         });
-
-        if (roomSearchInput) {
-            roomSearchInput.addEventListener('input', (event) => {
-                const keyword = event.target.value.trim().toLowerCase();
-                roomCards.forEach((card) => {
-                    const roomName = card.dataset.roomName || '';
-                    const roomDescription = card.dataset.roomDescription || '';
-                    const matched = !keyword || roomName.includes(keyword) || roomDescription.includes(keyword);
-                    card.style.display = matched ? '' : 'none';
-                });
-            });
-        }
 
         const threadItems = Array.from(document.querySelectorAll('.unified-thread-item'));
         const conversationFrame = document.getElementById('conversation-frame');
@@ -412,6 +417,51 @@
             if (initiallyActiveThread) {
                 openThreadPage(initiallyActiveThread);
             }
+        }
+
+        function filterConversationThreads(keyword) {
+            const normalizedKeyword = (keyword || '').trim().toLowerCase();
+            threadItems.forEach((item) => {
+                const name = (item.dataset.threadName || '').toLowerCase();
+                const preview = (item.dataset.threadPreview || '').toLowerCase();
+                const type = (item.dataset.threadType || '').toLowerCase();
+                const matched = !normalizedKeyword
+                    || name.includes(normalizedKeyword)
+                    || preview.includes(normalizedKeyword)
+                    || type.includes(normalizedKeyword);
+                item.hidden = !matched;
+            });
+        }
+
+        function toggleConversationSearch(forceState) {
+            if (!conversationSearchShell || !conversationSearchTrigger) return;
+            const shouldOpen = typeof forceState === 'boolean'
+                ? forceState
+                : !conversationSearchShell.classList.contains('open');
+            conversationSearchShell.classList.toggle('open', shouldOpen);
+            conversationSearchTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            if (shouldOpen && conversationSearchInput) {
+                requestAnimationFrame(() => conversationSearchInput.focus());
+            }
+            if (!shouldOpen && conversationSearchInput) {
+                conversationSearchInput.value = '';
+                filterConversationThreads('');
+            }
+        }
+
+        if (conversationSearchTrigger) {
+            conversationSearchTrigger.addEventListener('click', () => toggleConversationSearch());
+        }
+
+        if (conversationSearchInput) {
+            conversationSearchInput.addEventListener('input', (event) => {
+                filterConversationThreads(event.target.value);
+            });
+            conversationSearchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    toggleConversationSearch(false);
+                }
+            });
         }
 
         const quickActionTrigger = document.getElementById('quick-action-trigger');

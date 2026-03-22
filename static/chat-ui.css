@@ -1381,6 +1381,45 @@ select.form-input {
     font-size: 13px;
 }
 
+.sidebar-heading-search {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.conversation-search-shell {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0;
+}
+
+.search-trigger {
+    flex-shrink: 0;
+}
+
+.conversation-search-input {
+    width: 0;
+    min-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    opacity: 0;
+    border-color: transparent;
+    pointer-events: none;
+    transition: width 0.18s ease, opacity 0.18s ease, padding 0.18s ease, border-color 0.18s ease;
+}
+
+.conversation-search-shell.open .conversation-search-input {
+    width: 168px;
+    padding-left: 14px;
+    padding-right: 14px;
+    opacity: 1;
+    border-color: rgba(104, 74, 52, 0.12);
+    pointer-events: auto;
+}
+
 .create-room-card {
     padding: 16px;
     border-radius: 22px;
@@ -1548,6 +1587,11 @@ select.form-input {
     color: inherit;
     background: rgba(255, 251, 246, 0.92);
     border: 1px solid rgba(104, 74, 52, 0.08);
+}
+
+.thread-list-item[hidden],
+.friend-list-item[hidden] {
+    display: none !important;
 }
 
 .friend-list-item-simple {
@@ -3321,6 +3365,14 @@ code {
         grid-template-columns: minmax(0, 1fr) auto;
     }
 
+    .sidebar-heading-search {
+        align-items: flex-start;
+    }
+
+    .conversation-search-shell.open .conversation-search-input {
+        width: 132px;
+    }
+
     .friend-card {
         grid-template-columns: minmax(0, 1fr);
         align-items: stretch;
@@ -3385,6 +3437,29 @@ code {
 
     .app-hub-page .content-card-feed[data-panel="lobby"] {
         display: none;
+    }
+
+    .app-hub-page {
+        height: auto;
+        min-height: 100vh;
+        overflow: auto;
+        padding: 0 0 18px;
+        gap: 14px;
+    }
+
+    .app-hub-page .hub-layout {
+        overflow: visible;
+        padding: 0 14px 18px;
+    }
+
+    .app-hub-page .sidebar-card {
+        min-height: auto;
+    }
+
+    .app-hub-page .conversation-list {
+        height: auto;
+        max-height: none;
+        overflow: visible;
     }
 
     .message {
@@ -3504,6 +3579,10 @@ code {
     }
 
     .room-page:not(.embed-chat-page) .room-layout {
+        flex: 1;
+        min-height: 0;
+        align-content: stretch;
+        grid-auto-rows: minmax(0, 1fr);
         padding: 8px 10px 10px;
     }
 
@@ -3856,10 +3935,15 @@ code {
 
     .direct-chat-page:not(.embed-chat-page) .direct-chat-layout {
         grid-template-columns: 1fr;
+        flex: 1;
+        min-height: 0;
+        align-content: stretch;
+        grid-auto-rows: minmax(0, 1fr);
         padding: 8px 10px 10px;
     }
 
     .direct-chat-page:not(.embed-chat-page) .chat-main {
+        height: 100%;
         border-radius: 20px;
     }
 
