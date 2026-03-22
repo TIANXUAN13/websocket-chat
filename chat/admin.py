@@ -18,7 +18,7 @@ from .models import (
 
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
-    list_display = ('name', 'created_by', 'created_at')
+    list_display = ('name', 'created_by', 'avatar', 'avatar_image', 'created_at')
     search_fields = ('name', 'created_by__username')
 
 
@@ -31,8 +31,8 @@ class MessageAdmin(admin.ModelAdmin):
 
 @admin.register(RoomMembership)
 class RoomMembershipAdmin(admin.ModelAdmin):
-    list_display = ('room', 'user', 'is_active', 'joined_at', 'removed_at')
-    list_filter = ('is_active',)
+    list_display = ('room', 'user', 'is_active', 'is_admin', 'joined_at', 'removed_at')
+    list_filter = ('is_active', 'is_admin')
     search_fields = ('room__name', 'user__username')
 
 

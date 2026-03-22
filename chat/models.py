@@ -179,6 +179,7 @@ class Room(models.Model):
     """聊天室"""
     name = models.CharField(max_length=100, unique=True, verbose_name='房间名称')
     avatar = models.CharField(max_length=8, default='💬', verbose_name='房间头像')
+    avatar_image = models.ImageField(upload_to='room_avatars/', blank=True, null=True, verbose_name='房间头像图片')
     description = models.CharField(max_length=120, blank=True, default='一起聊聊吧', verbose_name='房间简介')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name='创建者')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
@@ -190,6 +191,16 @@ class Room(models.Model):
     
     def __str__(self):
         return str(self.name)
+
+    @property
+    def avatar_url(self):
+        if self.avatar_image:
+            return self.avatar_image.url
+        return ''
+
+    def delete_avatar_image_file(self):
+        if self.avatar_image:
+            self.avatar_image.delete(save=False)
 
     @property
     def total_members(self):
@@ -211,6 +222,7 @@ class RoomMembership(models.Model):
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='memberships')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='room_memberships')
     is_active = models.BooleanField(default=True, verbose_name='是否仍在群中')
+    is_admin = models.BooleanField(default=False, verbose_name='是否为群管理员')
     joined_at = models.DateTimeField(auto_now_add=True, verbose_name='加入时间')
     removed_at = models.DateTimeField(null=True, blank=True, verbose_name='移出时间')
 

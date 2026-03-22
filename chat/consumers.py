@@ -47,6 +47,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.room_users[self.room_name][self.channel_name] = {
                 'username': self.user,
                 'is_owner': await self.check_is_owner(),
+                'is_admin': await self.check_is_admin(),
                 'avatar_label': await self.get_user_avatar_label(),
                 'avatar_url': await self.get_user_avatar_url(),
                 'friend_id': await self.get_user_friend_id(),
@@ -136,6 +137,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.room_users[self.room_name][self.channel_name] = {
                 'username': self.user,
                 'is_owner': await self.check_is_owner(),
+                'is_admin': await self.check_is_admin(),
                 'avatar_label': await self.get_user_avatar_label(),
                 'avatar_url': await self.get_user_avatar_url(),
                 'friend_id': await self.get_user_friend_id(),
@@ -341,6 +343,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return {
                 username: {
                     'is_owner': bool(meta.get('is_owner')),
+                    'is_admin': bool(meta.get('is_admin')),
                     'avatar_label': meta.get('avatar_label', self.get_avatar_label_for_username(username)),
                     'avatar_url': meta.get('avatar_url', ''),
                     'friend_id': meta.get('friend_id', ''),
@@ -362,6 +365,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             connected_meta = connected_users.get(linked_user.username, {})
             users[linked_user.username] = {
                 'is_owner': bool(room.created_by_id == linked_user.id),
+                'is_admin': bool(membership.is_admin),
                 'avatar_label': connected_meta.get('avatar_label', profile.get_avatar_label()),
                 'avatar_url': connected_meta.get('avatar_url', profile.avatar_url),
                 'friend_id': connected_meta.get('friend_id', profile.friend_id),
@@ -373,6 +377,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 continue
             users[username] = {
                 'is_owner': bool(meta.get('is_owner')),
+                'is_admin': bool(meta.get('is_admin')),
                 'avatar_label': meta.get('avatar_label', self.get_avatar_label_for_username(username)),
                 'avatar_url': meta.get('avatar_url', ''),
                 'friend_id': meta.get('friend_id', ''),
@@ -442,6 +447,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def check_is_owner(self):
         return await self._check_is_owner()
 
+    async def check_is_admin(self):
+        return await self._check_is_admin()
+
     @database_sync_to_async
     def _check_is_owner(self):
         from .models import Room
@@ -452,6 +460,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except:
             pass
         return False
+
+    @database_sync_to_async
+    def _check_is_admin(self):
+        from .models import RoomMembership
+        try:
+            user = self.scope.get('user')
+            if not user or not user.is_authenticated:
+                return False
+            membership = RoomMembership.objects.filter(
+                room__name=self.room_name,
+                user=user,
+                is_active=True,
+            ).first()
+            return bool(membership and membership.is_admin)
+        except Exception:
+            return False
 
     async def chat_message(self, event):
         await self.send(text_data=json.dumps(event['payload']))

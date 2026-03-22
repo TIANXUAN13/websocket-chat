@@ -51,6 +51,7 @@ from .services.geoip_service import GeoIPService
 DEFAULT_ROOM_AVATARS = ['💬', '🐱', '🐶', '🐻', '🎮', '📚', '☕', '🌙', '🎵', '🍀']
 MAX_AVATAR_BYTES = 1024 * 1024
 MAX_AVATAR_DIMENSION = 720
+MAX_ROOM_ADMIN_COUNT = 10
 QUOTED_MESSAGE_PATTERN = re.compile(r'^\[\[quote\|([^|\]]*)\|([^|\]]*)\|([^|\]]*)\]\]\n?([\s\S]*)$')
 
 
@@ -123,7 +124,7 @@ def get_or_create_chat_profile(user):
     return profile
 
 
-def compress_avatar_upload(uploaded_file, username):
+def compress_image_upload(uploaded_file, base_name, upload_dir):
     try:
         image = Image.open(uploaded_file)
         image = ImageOps.exif_transpose(image)
@@ -156,8 +157,18 @@ def compress_avatar_upload(uploaded_file, username):
             continue
         quality -= 8
 
-    safe_name = ''.join(ch for ch in (username or 'user').lower() if ch.isalnum() or ch == '_') or 'user'
-    return ContentFile(content, name=f'avatars/{safe_name}_avatar.jpg')
+    normalized_base = base_name or 'file'
+    safe_name = ''.join(ch for ch in normalized_base.lower() if ch.isalnum() or ch == '_') or 'file'
+    hashed_suffix = hashlib.sha1(normalized_base.encode('utf-8')).hexdigest()[:10]
+    return ContentFile(content, name=f'{upload_dir}/{safe_name}_{hashed_suffix}.jpg')
+
+
+def compress_avatar_upload(uploaded_file, username):
+    return compress_image_upload(uploaded_file, f'{username}_avatar', 'avatars')
+
+
+def compress_room_avatar_upload(uploaded_file, room_name):
+    return compress_image_upload(uploaded_file, f'{room_name}_room_avatar', 'room_avatars')
 
 
 def are_friends(user, other_user):
@@ -196,6 +207,22 @@ def get_or_create_room_membership(room, user):
         return None, False
 
 
+def get_room_membership(room, user):
+    if not room or not user or not user.is_authenticated:
+        return None
+    membership, _ = get_or_create_room_membership(room, user)
+    return membership
+
+
+def can_manage_room_avatar(room, user, membership=None):
+    if not room or not user or not user.is_authenticated:
+        return False
+    if room.created_by_id == user.id:
+        return True
+    membership = membership or get_room_membership(room, user)
+    return bool(membership and membership.is_active and membership.is_admin)
+
+
 def get_direct_visibility_cutoff(state):
     cutoffs = [value for value in [state.cleared_at, state.deleted_at] if value]
     return max(cutoffs) if cutoffs else None
@@ -226,6 +253,8 @@ def build_room_threads(user):
         threads.append({
             'type': 'room',
             'name': room.name,
+            'avatar_label': room.avatar,
+            'avatar_url': room.avatar_url,
             'url': reverse('chat_room', args=[room.name]),
             'embed_url': f"{reverse('chat_room', args=[room.name])}?embed=1&v={embed_version}",
             'inbox_url': f"{reverse('inbox')}?thread_type=room&target={quote(room.name)}",
@@ -260,6 +289,8 @@ def build_direct_threads(user):
             'type': 'direct',
             'name': other_user.username,
             'friend_id': getattr(getattr(other_user, 'chat_profile', None), 'friend_id', ''),
+            'avatar_label': getattr(getattr(other_user, 'chat_profile', None), 'get_avatar_label', lambda: other_user.username[:2].upper())(),
+            'avatar_url': getattr(getattr(other_user, 'chat_profile', None), 'avatar_url', ''),
             'url': reverse('direct_chat', args=[other_user.username]),
             'embed_url': f"{reverse('direct_chat', args=[other_user.username])}?embed=1&v={embed_version}",
             'inbox_url': f"{reverse('inbox')}?thread_type=direct&target={quote(other_user.username)}",
@@ -318,6 +349,7 @@ def build_room_member_records(room, current_user):
                 'avatar_url': profile.avatar_url,
                 'friend_id': profile.friend_id,
                 'is_owner': bool(room.created_by and room.created_by_id == linked_user.id),
+                'is_admin': bool(membership.is_admin),
                 'is_self': bool(current_user and current_user.id == linked_user.id),
                 'is_online': linked_user.id in online_user_ids,
             })
@@ -341,6 +373,7 @@ def build_room_member_records(room, current_user):
                 'avatar_url': profile.avatar_url if profile else '',
                 'friend_id': profile.friend_id if profile else '',
                 'is_owner': bool(room.created_by and room.created_by.username == username),
+                'is_admin': False,
                 'is_self': bool(current_user and current_user.username == username),
                 'is_online': bool(linked_user and linked_user.sessions.exists()),
             })
@@ -348,6 +381,7 @@ def build_room_member_records(room, current_user):
     member_records.sort(key=lambda item: (
         not item['is_owner'],
         not item['is_self'],
+        not item['is_admin'],
         item['username'].lower(),
     ))
     return member_records
@@ -579,9 +613,13 @@ def room(request, room_name):
     """具体聊天室页面"""
     try:
         room = Room.objects.get(name=room_name)
+        room_membership = get_room_membership(room, request.user)
         is_owner = room.created_by == request.user
+        is_admin = bool(room_membership and room_membership.is_active and room_membership.is_admin)
     except Room.DoesNotExist:
         is_owner = False
+        is_admin = False
+        room_membership = None
         room = None
 
     if not room:
@@ -596,14 +634,106 @@ def room(request, room_name):
     if request.method == 'POST':
         action = request.POST.get('action', 'room_settings')
 
+        if action == 'room_avatar':
+            if not can_manage_room_avatar(room, request.user, room_membership):
+                messages.error(request, '只有房主或群管理员才能修改群头像')
+                return redirect('chat_room', room_name=room.name)
+
+            next_avatar = request.POST.get('room_avatar', room.avatar).strip() or room.avatar
+            if next_avatar not in DEFAULT_ROOM_AVATARS:
+                next_avatar = '💬'
+
+            remove_room_avatar = request.POST.get('remove_room_avatar') == 'on'
+            uploaded_room_avatar = request.FILES.get('room_avatar_image')
+            update_fields = ['avatar']
+            room.avatar = next_avatar
+
+            if remove_room_avatar and room.avatar_image:
+                room.delete_avatar_image_file()
+                room.avatar_image = None
+                update_fields.append('avatar_image')
+
+            if uploaded_room_avatar:
+                try:
+                    optimized_room_avatar = compress_room_avatar_upload(uploaded_room_avatar, room.name)
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                    return redirect('chat_room', room_name=room.name)
+
+                if room.avatar_image:
+                    room.delete_avatar_image_file()
+                room.avatar_image.save(optimized_room_avatar.name, optimized_room_avatar, save=False)
+                if 'avatar_image' not in update_fields:
+                    update_fields.append('avatar_image')
+
+            room.save(update_fields=update_fields)
+            messages.success(request, '群头像已更新')
+            return redirect('chat_room', room_name=room.name)
+
+        if action == 'set_admin':
+            if not is_owner:
+                messages.error(request, '只有房主才能设置群管理员')
+                return redirect('chat_room', room_name=room.name)
+
+            target_username = request.POST.get('target_username', '').strip()
+            try:
+                target_user = User.objects.get(username=target_username)
+                target_membership, _ = RoomMembership.objects.get_or_create(
+                    room=room,
+                    user=target_user,
+                    defaults={'is_active': True, 'removed_at': None},
+                )
+            except User.DoesNotExist:
+                messages.error(request, '目标成员不存在')
+                return redirect('chat_room', room_name=room.name)
+
+            if room.created_by_id == target_user.id:
+                messages.error(request, '房主不需要设置为管理员')
+                return redirect('chat_room', room_name=room.name)
+            if not target_membership.is_active:
+                messages.error(request, '只能设置仍在群内的成员为管理员')
+                return redirect('chat_room', room_name=room.name)
+            if target_membership.is_admin:
+                messages.info(request, f'{target_username} 已经是群管理员')
+                return redirect('chat_room', room_name=room.name)
+
+            admin_count = room.memberships.filter(is_active=True, is_admin=True).count()
+            if admin_count >= MAX_ROOM_ADMIN_COUNT:
+                messages.error(request, f'群管理员最多只能设置 {MAX_ROOM_ADMIN_COUNT} 个')
+                return redirect('chat_room', room_name=room.name)
+
+            target_membership.is_admin = True
+            target_membership.save(update_fields=['is_admin'])
+            messages.success(request, f'已将 {target_username} 设为群管理员')
+            return redirect('chat_room', room_name=room.name)
+
+        if action == 'revoke_admin':
+            if not is_owner:
+                messages.error(request, '只有房主才能取消群管理员')
+                return redirect('chat_room', room_name=room.name)
+
+            target_username = request.POST.get('target_username', '').strip()
+            try:
+                target_user = User.objects.get(username=target_username)
+                target_membership = RoomMembership.objects.get(room=room, user=target_user)
+            except (User.DoesNotExist, RoomMembership.DoesNotExist):
+                messages.error(request, '目标管理员不存在')
+                return redirect('chat_room', room_name=room.name)
+
+            if not target_membership.is_admin:
+                messages.info(request, f'{target_username} 目前不是群管理员')
+                return redirect('chat_room', room_name=room.name)
+
+            target_membership.is_admin = False
+            target_membership.save(update_fields=['is_admin'])
+            messages.success(request, f'已取消 {target_username} 的群管理员身份')
+            return redirect('chat_room', room_name=room.name)
+
         if not is_owner:
             messages.error(request, '只有房主才能编辑房间资料')
             return redirect('chat_room', room_name=room.name)
 
         new_room_name = request.POST.get('room_name', room.name).strip() or room.name
-        room.avatar = request.POST.get('room_avatar', room.avatar).strip() or room.avatar
-        if room.avatar not in DEFAULT_ROOM_AVATARS:
-            room.avatar = '💬'
         room.description = request.POST.get('room_description', room.description).strip()[:120] or '一起聊聊吧'
         room.name = new_room_name
 
@@ -616,7 +746,7 @@ def room(request, room_name):
         return redirect('chat_room', room_name=room.name)
 
     chat_profile = get_or_create_chat_profile(request.user)
-    room_membership, _ = get_or_create_room_membership(room, request.user)
+    room_membership = room_membership or get_room_membership(room, request.user)
     room_member_records = build_room_member_records(room, request.user)
     visit_state = get_or_create_room_visit_state(request.user, room)
     visit_state.last_read_at = timezone.now()
@@ -630,6 +760,7 @@ def room(request, room_name):
     return render(request, 'chat/room.html', {
         'room': room,
         'room_avatars': DEFAULT_ROOM_AVATARS,
+        'room_admin_count': room.memberships.filter(is_active=True, is_admin=True).count(),
         'room_name': room.name,
         'room_name_json': mark_safe(json.dumps(room.name)),
         'room_total_members': room.total_members,
@@ -637,6 +768,9 @@ def room(request, room_name):
         'room_members_json': mark_safe(json.dumps(room_member_records)),
         'is_removed_from_room': bool(room_membership and (not room_membership.is_active) and room.created_by_id != request.user.id),
         'is_owner': is_owner,
+        'is_admin': is_admin,
+        'can_manage_room_avatar': can_manage_room_avatar(room, request.user, room_membership),
+        'max_room_admin_count': MAX_ROOM_ADMIN_COUNT,
         'chat_profile': chat_profile,
         'chat_profile_payload_json': mark_safe(json.dumps(chat_profile.to_payload())),
         'chat_theme_choices': CHAT_COLOR_THEMES.items(),

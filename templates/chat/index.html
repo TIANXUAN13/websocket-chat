@@ -112,6 +112,13 @@
                             data-thread-preview="{{ item.last_message_preview }}"
                             data-thread-timestamp="{{ item.last_message_at|date:'m-d H:i' }}"
                         >
+                            <div class="thread-avatar{% if item.avatar_url %} has-photo{% endif %}">
+                                {% if item.avatar_url %}
+                                    <img class="avatar-photo" src="{{ item.avatar_url }}" alt="{{ item.name }} 的头像">
+                                {% else %}
+                                    {{ item.avatar_label|default:item.name|slice:":2" }}
+                                {% endif %}
+                            </div>
                             <div class="thread-main">
                                 <div class="thread-topline">
                                     <strong class="room-title">{{ item.name }}</strong>
