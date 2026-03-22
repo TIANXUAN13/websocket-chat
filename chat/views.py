@@ -1,6 +1,7 @@
 import json
 import hashlib
 import io
+import re
 from urllib.parse import quote
 
 # chat/views.py
@@ -50,6 +51,7 @@ from .services.geoip_service import GeoIPService
 DEFAULT_ROOM_AVATARS = ['💬', '🐱', '🐶', '🐻', '🎮', '📚', '☕', '🌙', '🎵', '🍀']
 MAX_AVATAR_BYTES = 1024 * 1024
 MAX_AVATAR_DIMENSION = 720
+QUOTED_MESSAGE_PATTERN = re.compile(r'^\[\[quote\|([^|\]]*)\|([^|\]]*)\|([^|\]]*)\]\]\n?([\s\S]*)$')
 
 
 def build_room_group_name(room_name):
@@ -66,6 +68,21 @@ def get_safe_next_url(request, fallback_name='chat_index'):
     ):
         return candidate
     return fallback_url
+
+
+def get_thread_preview_text(message_text, limit=36):
+    raw = (message_text or '').strip()
+    if not raw:
+        return ''
+
+    match = QUOTED_MESSAGE_PATTERN.match(raw)
+    if match:
+        raw = (match.group(4) or '').strip()
+
+    if not raw:
+        raw = '引用消息'
+
+    return raw[:limit]
 
 
 def notify_user_presence_changed(user):
@@ -213,7 +230,7 @@ def build_room_threads(user):
             'embed_url': f"{reverse('chat_room', args=[room.name])}?embed=1&v={embed_version}",
             'inbox_url': f"{reverse('inbox')}?thread_type=room&target={quote(room.name)}",
             'unread_count': unread_qs.count(),
-            'last_message_preview': latest_message.message[:36],
+            'last_message_preview': get_thread_preview_text(latest_message.message),
             'last_message_at': latest_message.timestamp,
         })
 
@@ -248,7 +265,7 @@ def build_direct_threads(user):
             'inbox_url': f"{reverse('inbox')}?thread_type=direct&target={quote(other_user.username)}",
             'delete_url': reverse('delete_direct_conversation', args=[other_user.username]),
             'unread_count': unread_qs.count(),
-            'last_message_preview': latest_message.content[:36],
+            'last_message_preview': get_thread_preview_text(latest_message.content),
             'last_message_at': latest_message.created_at,
         })
 

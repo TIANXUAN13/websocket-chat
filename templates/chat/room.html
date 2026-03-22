@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ room_name }} - 聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322z">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322ab">
 </head>
 <body class="room-page{% if embed_mode %} embed-chat-page{% endif %}">
     {% if not embed_mode %}
@@ -177,6 +177,17 @@
             </div>
 
             <div class="chat-input-area">
+                <div class="reply-draft" id="reply-draft" hidden>
+                    <div class="reply-draft-copy">
+                        <strong id="reply-draft-user">引用</strong>
+                        <span id="reply-draft-text"></span>
+                    </div>
+                    <button class="reply-draft-close" type="button" id="reply-draft-close" aria-label="取消引用">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
                 <input class="form-input" type="text" id="message-input" placeholder="输入消息..." disabled>
                 <button class="btn btn-primary send-btn-compact" id="send-btn" disabled aria-label="发送消息">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -189,6 +200,11 @@
         </section>
     </main>
 
+    <div class="message-context-menu panel-card" id="message-context-menu" hidden>
+        <button class="message-context-action" type="button" data-action="copy">复制</button>
+        <button class="message-context-action" type="button" data-action="quote">引用</button>
+    </div>
+
     <script>
         const roomName = {{ room_name_json }};
         const isOwner = {{ is_owner|yesno:"true,false" }};
@@ -200,6 +216,11 @@
         const userList = document.getElementById('user-list');
         const memberCount = document.getElementById('member-count');
         const onlineMemberCount = document.getElementById('online-member-count');
+        const replyDraft = document.getElementById('reply-draft');
+        const replyDraftUser = document.getElementById('reply-draft-user');
+        const replyDraftText = document.getElementById('reply-draft-text');
+        const replyDraftClose = document.getElementById('reply-draft-close');
+        const messageContextMenu = document.getElementById('message-context-menu');
         const settingsDrawer = document.getElementById('room-settings-drawer');
         const settingsOverlay = document.getElementById('settings-overlay');
         const username = '{{ user.username }}';
@@ -216,6 +237,8 @@
         let hasInitialHistoryLoaded = false;
         let currentOnlineUsers = {};
         let hasShownRemovedAlert = false;
+        let activeMessageElement = null;
+        let replyDraftState = null;
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = protocol + '//' + window.location.host + '/ws/chat/' + roomName + '/';
@@ -281,6 +304,12 @@
             appendMessage(data);
             if (data.type === 'chat') {
                 markRoomAsRead();
+                requestAnimationFrame(() => {
+                    const latestMessageElement = Array.from(messagesDiv.querySelectorAll('.message'))
+                        .reverse()
+                        .find((item) => !item.classList.contains('system') && !item.classList.contains('kick') && !item.classList.contains('delete-room'));
+                    syncParentThreadStatusFromElement(latestMessageElement);
+                });
             }
         };
 
@@ -293,6 +322,10 @@
                     },
                     credentials: 'same-origin',
                 });
+                const latestMessageElement = Array.from(messagesDiv.querySelectorAll('.message'))
+                    .reverse()
+                    .find((item) => !item.classList.contains('system') && !item.classList.contains('kick') && !item.classList.contains('delete-room'));
+                syncParentThreadStatusFromElement(latestMessageElement);
             } catch (error) {
                 console.warn('同步群聊已读失败:', error);
             }
@@ -317,6 +350,114 @@
             }
         }
 
+        function parseQuotedMessage(message) {
+            const raw = typeof message === 'string' ? message : '';
+            const match = raw.match(/^\[\[quote\|([^|\]]*)\|([^|\]]*)\|([^|\]]*)\]\]\n?([\s\S]*)$/);
+            if (!match) {
+                return {
+                    isQuoted: false,
+                    body: raw,
+                    fullText: raw,
+                };
+            }
+
+            let quotedText = '';
+            try {
+                quotedText = decodeURIComponent(match[3] || '');
+            } catch (error) {
+                quotedText = match[3] || '';
+            }
+
+            const body = match[4] || '';
+            return {
+                isQuoted: true,
+                quotedUser: match[1] || '用户',
+                quotedTime: match[2] || '',
+                quotedText,
+                body,
+                fullText: `${match[1] || '用户'}: ${quotedText}${body ? `\n${body}` : ''}`,
+            };
+        }
+
+        function renderMessageContent(parsedMessage) {
+            if (!parsedMessage.isQuoted) {
+                return `<div class="msg-text">${escapeHtml(parsedMessage.body)}</div>`;
+            }
+
+            return `
+                <div class="msg-text msg-text-quoted">
+                    <div class="quoted-reply">
+                        <div class="quoted-reply-meta">回复 ${escapeHtml(parsedMessage.quotedUser)}${parsedMessage.quotedTime ? ` · ${escapeHtml(parsedMessage.quotedTime)}` : ''}</div>
+                        <div class="quoted-reply-text">${escapeHtml(parsedMessage.quotedText)}</div>
+                    </div>
+                    <div class="msg-text-body">${escapeHtml(parsedMessage.body)}</div>
+                </div>
+            `;
+        }
+
+        function buildQuotedPayload(draft, body) {
+            const encodedQuotedText = encodeURIComponent(draft.text || '');
+            return `[[quote|${draft.user || ''}|${draft.time || ''}|${encodedQuotedText}]]\n${body}`;
+        }
+
+        function setReplyDraft(draft) {
+            replyDraftState = draft;
+            if (!draft) {
+                replyDraft.hidden = true;
+                replyDraftUser.textContent = '引用回复';
+                replyDraftText.textContent = '';
+                return;
+            }
+
+            replyDraft.hidden = false;
+            replyDraftUser.textContent = `回复 ${draft.user || '用户'}`;
+            replyDraftText.textContent = draft.text || '';
+        }
+
+        function hideMessageContextMenu() {
+            activeMessageElement = null;
+            messageContextMenu.hidden = true;
+        }
+
+        function notifyParentThreadStatus(previewText, timestampText, unreadCount = 0) {
+            if (window.parent === window || !window.parent) return;
+            window.parent.postMessage({
+                type: 'chat_thread_status',
+                threadType: 'room',
+                threadName: roomName,
+                preview: previewText || '',
+                timestamp: timestampText || '',
+                unreadCount: unreadCount,
+            }, window.location.origin);
+        }
+
+        function syncParentThreadStatusFromElement(messageElement) {
+            if (!messageElement || messageElement.classList.contains('system') || messageElement.classList.contains('kick') || messageElement.classList.contains('delete-room')) {
+                return;
+            }
+            const parsedMessage = parseQuotedMessage(messageElement.dataset.messageContent || '');
+            notifyParentThreadStatus(parsedMessage.body || parsedMessage.fullText || '', messageElement.dataset.messageTime || '', 0);
+        }
+
+        async function copyMessageText(messageElement) {
+            const parsedMessage = parseQuotedMessage(messageElement?.dataset.messageContent || '');
+            const textToCopy = parsedMessage.fullText || '';
+            if (!textToCopy) {
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(textToCopy);
+            } catch (error) {
+                const tempInput = document.createElement('textarea');
+                tempInput.value = textToCopy;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                tempInput.remove();
+            }
+        }
+
         function appendMessage(data, prepend = false, fallbackTime = null) {
             const emptyChat = messagesDiv.querySelector('.empty-chat');
             if (emptyChat) {
@@ -336,10 +477,15 @@
 
             const date = data.timestamp ? new Date(data.timestamp) : fallbackTime || new Date();
             const timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+            const normalizedMessage = typeof data.message === 'string' ? data.message : '';
+            const parsedMessage = parseQuotedMessage(normalizedMessage);
+            msgDiv.dataset.messageUser = data.user || '';
+            msgDiv.dataset.messageTime = timeStr;
+            msgDiv.dataset.messageContent = normalizedMessage;
 
             let html = '';
             if (data.type === 'system' || data.type === 'kick' || data.type === 'delete_room') {
-                html = `<span>${escapeHtml(data.message)}</span>`;
+                html = `<span>${escapeHtml(normalizedMessage)}</span>`;
             } else {
                 const avatarLabel = escapeHtml(data.avatar_label || getFallbackAvatar(data.user));
                 const avatarMarkup = data.avatar_url
@@ -361,7 +507,7 @@
                 html += `</div>`;
                 html += `</div>`;
                 html += `<div class="message-bubble">`;
-                html += `<div class="msg-text">${escapeHtml(data.message)}</div>`;
+                html += renderMessageContent(parsedMessage);
                 html += `<div class="msg-time">${timeStr}</div>`;
                 html += `</div>`;
                 html += `</div>`;
@@ -550,6 +696,52 @@
             return `${userProfileUrlTemplate.replace('__username__', encodeURIComponent(name))}?${userProfileNextQuery}`;
         }
 
+        messageContextMenu.addEventListener('click', async function(event) {
+            const actionButton = event.target.closest('.message-context-action');
+            if (!actionButton || !activeMessageElement) {
+                return;
+            }
+
+            const action = actionButton.dataset.action;
+            if (action === 'copy') {
+                await copyMessageText(activeMessageElement);
+            } else if (action === 'quote') {
+                const parsedMessage = parseQuotedMessage(activeMessageElement.dataset.messageContent || '');
+                setReplyDraft({
+                    user: activeMessageElement.dataset.messageUser || '用户',
+                    time: activeMessageElement.dataset.messageTime || '',
+                    text: parsedMessage.body || parsedMessage.fullText || '',
+                });
+                messageInput.focus();
+            }
+
+            hideMessageContextMenu();
+        });
+
+        replyDraftClose.addEventListener('click', function() {
+            setReplyDraft(null);
+            messageInput.focus();
+        });
+
+        messagesDiv.addEventListener('contextmenu', function(event) {
+            const bubble = event.target.closest('.message-bubble');
+            const messageElement = event.target.closest('.message');
+            if (!bubble || !messageElement || messageElement.classList.contains('system') || messageElement.classList.contains('kick') || messageElement.classList.contains('delete-room')) {
+                hideMessageContextMenu();
+                return;
+            }
+
+            event.preventDefault();
+            activeMessageElement = messageElement;
+            messageContextMenu.hidden = false;
+            const menuWidth = messageContextMenu.offsetWidth || 180;
+            const menuHeight = messageContextMenu.offsetHeight || 120;
+            const maxLeft = window.innerWidth - menuWidth - 12;
+            const maxTop = window.innerHeight - menuHeight - 12;
+            messageContextMenu.style.left = `${Math.max(12, Math.min(event.clientX, maxLeft))}px`;
+            messageContextMenu.style.top = `${Math.max(12, Math.min(event.clientY, maxTop))}px`;
+        });
+
         async function syncPreciseLocation(position) {
             try {
                 await fetch('{% url "update_precise_location" %}', {
@@ -597,6 +789,10 @@
                 if (!hasInitialHistoryLoaded) {
                     requestAnimationFrame(() => {
                         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                        const latestMessageElement = Array.from(messagesDiv.querySelectorAll('.message'))
+                            .reverse()
+                            .find((item) => !item.classList.contains('system') && !item.classList.contains('kick') && !item.classList.contains('delete-room'));
+                        syncParentThreadStatusFromElement(latestMessageElement);
                     });
                 } else {
                     const nextScrollHeight = messagesDiv.scrollHeight;
@@ -672,12 +868,14 @@
                 return;
             }
             if (message && chatSocket.readyState === WebSocket.OPEN) {
+                const payloadMessage = replyDraftState ? buildQuotedPayload(replyDraftState, message) : message;
                 chatSocket.send(JSON.stringify({
                     'type': 'chat',
-                    'message': message,
+                    'message': payloadMessage,
                     'user': username
                 }));
                 messageInput.value = '';
+                setReplyDraft(null);
             }
         }
 
@@ -695,10 +893,22 @@
         loadMoreBtn.addEventListener('click', loadMoreHistory);
 
         document.addEventListener('click', function(event) {
+            if (!event.target.closest('.message-context-menu')) {
+                hideMessageContextMenu();
+            }
             const actionTarget = event.target.closest('.avatar-action');
             if (!actionTarget) return;
             const friendName = actionTarget.dataset.friendName || '这位用户';
             openUserProfile(friendName);
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                hideMessageContextMenu();
+                if (replyDraftState) {
+                    setReplyDraft(null);
+                }
+            }
         });
 
         messagesDiv.addEventListener('scroll', function() {

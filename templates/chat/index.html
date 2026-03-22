@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322z">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322ab">
 </head>
 <body class="lobby-page app-hub-page">
     <header class="topbar panel-card">
@@ -110,6 +110,7 @@
                             data-thread-type="{{ item.type }}"
                             data-thread-target="{{ item.name }}"
                             data-thread-preview="{{ item.last_message_preview }}"
+                            data-thread-timestamp="{{ item.last_message_at|date:'m-d H:i' }}"
                         >
                             <div class="thread-main">
                                 <div class="thread-topline">
@@ -439,6 +440,47 @@
             });
         }
 
+        function updateThreadItemStatus(payload) {
+            if (!payload) return;
+            const matchedItem = threadItems.find((item) => (
+                (item.dataset.threadType || '') === (payload.threadType || '')
+                && (item.dataset.threadName || '') === (payload.threadName || '')
+            ));
+            if (!matchedItem) return;
+
+            if (typeof payload.preview === 'string') {
+                matchedItem.dataset.threadPreview = payload.preview;
+                const previewNode = matchedItem.querySelector('.thread-preview');
+                if (previewNode) {
+                    previewNode.textContent = payload.preview;
+                }
+            }
+
+            if (typeof payload.timestamp === 'string' && payload.timestamp) {
+                matchedItem.dataset.threadTimestamp = payload.timestamp;
+                const metaNodes = matchedItem.querySelectorAll('.room-meta span');
+                if (metaNodes.length > 1) {
+                    metaNodes[1].textContent = payload.timestamp;
+                }
+            }
+
+            const nextUnreadCount = Number.isFinite(payload.unreadCount) ? payload.unreadCount : 0;
+            let countNode = matchedItem.querySelector('.thread-count');
+            if (nextUnreadCount > 0) {
+                if (!countNode) {
+                    countNode = document.createElement('span');
+                    countNode.className = 'thread-count';
+                    const topline = matchedItem.querySelector('.thread-topline');
+                    if (topline) {
+                        topline.appendChild(countNode);
+                    }
+                }
+                countNode.textContent = String(nextUnreadCount);
+            } else if (countNode) {
+                countNode.remove();
+            }
+        }
+
         function toggleConversationSearch(forceState) {
             if (!conversationSearchShell || !conversationSearchTrigger) return;
             const shouldOpen = typeof forceState === 'boolean'
@@ -504,6 +546,13 @@
             if (!quickActionMenu || quickActionMenu.hidden) return;
             if (event.target.closest('#quick-action-trigger') || event.target.closest('#quick-action-menu')) return;
             toggleQuickAction(false);
+        });
+
+        window.addEventListener('message', (event) => {
+            if (event.origin !== window.location.origin) return;
+            const payload = event.data || {};
+            if (payload.type !== 'chat_thread_status') return;
+            updateThreadItemStatus(payload);
         });
     </script>
 </body>
