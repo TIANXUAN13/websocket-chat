@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.password_validation import password_validators_help_text_html
 from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.utils.safestring import mark_safe
 from django.http import JsonResponse
@@ -246,6 +247,7 @@ def build_room_member_records(room, current_user):
     return member_records
 
 
+@ensure_csrf_cookie
 @csrf_protect
 def login_view(request):
     """登录页面"""
@@ -299,6 +301,7 @@ def login_view(request):
     return render(request, 'chat/login.html', {'form': form})
 
 
+@ensure_csrf_cookie
 def register_view(request):
     """注册页面"""
     if request.user.is_authenticated:
@@ -574,6 +577,10 @@ def profile_settings(request):
         'chat_profile': chat_profile,
         'chat_theme_choices': CHAT_COLOR_THEMES.items(),
         'chat_style_choices': CHAT_BUBBLE_STYLES.items(),
+        'chat_theme_choices_json': mark_safe(json.dumps(CHAT_COLOR_THEMES)),
+        'chat_style_choices_json': mark_safe(json.dumps(CHAT_BUBBLE_STYLES)),
+        'default_chat_theme': DEFAULT_CHAT_THEME,
+        'default_chat_style': DEFAULT_CHAT_STYLE,
         'current_location': getattr(request.user, 'location', None),
         'user': request.user,
         'pending_friend_requests_count': FriendRequest.objects.filter(
