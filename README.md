@@ -57,7 +57,7 @@ Linux 统一使用 `start_linux.sh`。
 首次执行下面这条即可完成完整服务部署并持续运行：
 
 ```bash
-chmod +x start_linux.sh scripts/service.sh scripts/run_linux_service.sh scripts/systemd_service.sh
+chmod +x start_linux.sh scripts/service.sh
 ./start_linux.sh
 ```
 
@@ -103,12 +103,6 @@ MIGRATE_ON_START=1
 - 生成 `/etc/systemd/system/websocket-chat.service`
 - 生成 `/etc/default/websocket-chat`
 - 执行 `systemctl enable` 并启动服务
-
-兼容入口：
-
-- `scripts/systemd_service.sh` 等价于 `./start_linux.sh`
-- `scripts/run_linux_service.sh` 等价于 `./start_linux.sh serve`
-
 
 ## 当前最小依赖
 

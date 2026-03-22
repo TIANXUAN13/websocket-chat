@@ -5,7 +5,64 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ target_user.username }} 的资料</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322z">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322copy2">
+    <script>
+        window.codexShowCopyToast = function(message, isError) {
+            let toast = document.getElementById('copy-feedback-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'copy-feedback-toast';
+                toast.className = 'copy-feedback-toast';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = message;
+            toast.classList.toggle('is-error', !!isError);
+            toast.classList.add('is-visible');
+            window.clearTimeout(window.__codexCopyToastTimer);
+            window.__codexCopyToastTimer = window.setTimeout(() => {
+                toast.classList.remove('is-visible');
+            }, 1800);
+        };
+
+        window.codexCopyText = async function(text, successMessage) {
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.setAttribute('readonly', 'readonly');
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.focus();
+                    textarea.select();
+                    textarea.setSelectionRange(0, textarea.value.length);
+                    const copied = document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    if (!copied) {
+                        window.prompt('复制失败，请手动复制下面的内容：', text);
+                        return false;
+                    }
+                }
+                window.codexShowCopyToast(successMessage || '已复制');
+                return true;
+            } catch (error) {
+                window.prompt('复制失败，请手动复制下面的内容：', text);
+                return false;
+            }
+        };
+
+        window.codexHandleCopyClick = function(element) {
+            const text = ('value' in element && element.value) ? element.value : (element.dataset.copyText || '');
+            const successMessage = element.dataset.copySuccess || '已复制';
+            if (!text) {
+                return false;
+            }
+            window.codexCopyText(text, successMessage);
+            return false;
+        };
+    </script>
 </head>
 <body class="lobby-page mobile-compact-shell">
     <header class="topbar panel-card">
@@ -61,7 +118,10 @@
                 <div class="profile-detail-text">
                     <h1>{{ target_user.username }}</h1>
                     <div class="profile-meta-list">
-                        <span class="pill pill-muted">好友 ID {{ target_profile.friend_id }}</span>
+                        <button class="copy-chip" type="button" data-copy-text="{{ target_profile.friend_id }}" data-copy-success="好友 ID 已复制" onclick="return window.codexHandleCopyClick(this)">
+                            <span>好友 ID {{ target_profile.friend_id }}</span>
+                            <span class="copy-chip-status">点击复制</span>
+                        </button>
                         {% if current_location and target_profile.show_location %}
                             <span class="pill pill-muted">{{ current_location.display_label }}</span>
                         {% endif %}
@@ -143,7 +203,10 @@
                         </div>
                         <div class="summary-row">
                             <span>好友 ID</span>
-                            <strong>{{ target_profile.friend_id }}</strong>
+                            <button class="copy-chip copy-chip-inline" type="button" data-copy-text="{{ target_profile.friend_id }}" data-copy-success="好友 ID 已复制" onclick="return window.codexHandleCopyClick(this)">
+                                <strong>{{ target_profile.friend_id }}</strong>
+                                <span class="copy-chip-status">点击复制</span>
+                            </button>
                         </div>
                         <div class="summary-row">
                             <span>个人介绍</span>
@@ -154,5 +217,90 @@
             </div>
         </section>
     </main>
+
+    <script>
+        let activeCopyResetTimer = null;
+        let activeCopyButton = null;
+
+        async function copyTextToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return;
+            }
+
+            const fallbackInput = document.createElement('input');
+            fallbackInput.value = text;
+            fallbackInput.setAttribute('readonly', 'readonly');
+            fallbackInput.style.position = 'fixed';
+            fallbackInput.style.opacity = '0';
+            document.body.appendChild(fallbackInput);
+            fallbackInput.select();
+            fallbackInput.setSelectionRange(0, fallbackInput.value.length);
+
+            const copied = document.execCommand('copy');
+            document.body.removeChild(fallbackInput);
+            if (!copied) {
+                throw new Error('copy_failed');
+            }
+        }
+
+        function showCopyToast(message, isError = false) {
+            let toast = document.getElementById('copy-feedback-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'copy-feedback-toast';
+                toast.className = 'copy-feedback-toast';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = message;
+            toast.classList.toggle('is-error', isError);
+            toast.classList.add('is-visible');
+            window.clearTimeout(toast._hideTimer);
+            toast._hideTimer = window.setTimeout(() => {
+                toast.classList.remove('is-visible');
+            }, 1800);
+        }
+
+        document.addEventListener('click', async (event) => {
+            const button = event.target.closest('[data-copy-text]');
+            if (!button) return;
+
+            event.preventDefault();
+            const copyText = 'value' in button ? button.value : button.dataset.copyText;
+            if (!copyText) return;
+
+            try {
+                await copyTextToClipboard(copyText);
+                const statusElement = button.querySelector('.copy-chip-status');
+                const originalStatus = button.dataset.originalStatus || statusElement?.textContent || '';
+                button.dataset.originalStatus = originalStatus;
+                if (activeCopyButton && activeCopyButton !== button) {
+                    activeCopyButton.classList.remove('is-copied');
+                    const previousStatusElement = activeCopyButton.querySelector('.copy-chip-status');
+                    if (previousStatusElement) {
+                        previousStatusElement.textContent = activeCopyButton.dataset.originalStatus || '点击复制';
+                    }
+                }
+                if (statusElement) {
+                    statusElement.textContent = button.dataset.copySuccess || '已复制';
+                }
+                button.classList.add('is-copied');
+                activeCopyButton = button;
+                showCopyToast(button.dataset.copySuccess || '已复制');
+                window.clearTimeout(activeCopyResetTimer);
+                activeCopyResetTimer = window.setTimeout(() => {
+                    button.classList.remove('is-copied');
+                    if (statusElement) {
+                        statusElement.textContent = originalStatus || '点击复制';
+                    }
+                    if (activeCopyButton === button) {
+                        activeCopyButton = null;
+                    }
+                }, 1600);
+            } catch (error) {
+                showCopyToast('复制失败，请稍后重试', true);
+            }
+        });
+    </script>
 </body>
 </html>

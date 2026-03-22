@@ -186,9 +186,7 @@ service_action() {
 
 install_service() {
   ensure_systemd
-  chmod +x "$SELF_SCRIPT" "$PROJECT_DIR/start.sh" \
-    "$PROJECT_DIR/scripts/run_linux_service.sh" \
-    "$PROJECT_DIR/scripts/systemd_service.sh"
+  chmod +x "$SELF_SCRIPT" "$PROJECT_DIR/start.sh"
   prepare_runtime
   write_env_file
   write_unit_file

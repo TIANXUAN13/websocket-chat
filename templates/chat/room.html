@@ -5,7 +5,64 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ room_name }} - 聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322ab">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322copy3">
+    <script>
+        window.codexShowCopyToast = function(message, isError) {
+            let toast = document.getElementById('copy-feedback-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'copy-feedback-toast';
+                toast.className = 'copy-feedback-toast';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = message;
+            toast.classList.toggle('is-error', !!isError);
+            toast.classList.add('is-visible');
+            window.clearTimeout(window.__codexCopyToastTimer);
+            window.__codexCopyToastTimer = window.setTimeout(() => {
+                toast.classList.remove('is-visible');
+            }, 1800);
+        };
+
+        window.codexCopyText = async function(text, successMessage) {
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.setAttribute('readonly', 'readonly');
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.focus();
+                    textarea.select();
+                    textarea.setSelectionRange(0, textarea.value.length);
+                    const copied = document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    if (!copied) {
+                        window.prompt('复制失败，请手动复制下面的内容：', text);
+                        return false;
+                    }
+                }
+                window.codexShowCopyToast(successMessage || '已复制');
+                return true;
+            } catch (error) {
+                window.prompt('复制失败，请手动复制下面的内容：', text);
+                return false;
+            }
+        };
+
+        window.codexHandleCopyClick = function(element) {
+            const text = ('value' in element && element.value) ? element.value : (element.dataset.copyText || '');
+            const successMessage = element.dataset.copySuccess || '已复制';
+            if (!text) {
+                return false;
+            }
+            window.codexCopyText(text, successMessage);
+            return false;
+        };
+    </script>
 </head>
 <body class="room-page{% if embed_mode %} embed-chat-page{% endif %}">
     {% if not embed_mode %}
@@ -29,7 +86,10 @@
                     <strong>{{ room.name }}</strong>
                     <span>{{ room.description }}</span>
                     <div class="room-stats-inline">
-                        <span class="pill pill-muted">群ID {{ room.room_id }}</span>
+                        <button class="copy-chip" type="button" data-copy-text="{{ room.room_id }}" data-copy-success="群 ID 已复制" onclick="return window.codexHandleCopyClick(this)">
+                            <span>群ID {{ room.room_id }}</span>
+                            <span class="copy-chip-status">点击复制</span>
+                        </button>
                         <span class="pill pill-muted">总人数 <strong id="total-member-count">{{ room_total_members }}</strong></span>
                         <span class="pill pill-muted">在线人数 <strong id="online-member-count">{{ room_online_members }}</strong></span>
                         {% if is_owner %}
@@ -117,7 +177,7 @@
                 <input type="hidden" name="action" value="room_settings">
                 <div class="stack">
                     <label class="field-label" for="room_id_display">群ID</label>
-                    <input class="form-input" id="room_id_display" type="text" value="{{ room.room_id }}" readonly>
+                    <input class="form-input copyable-field" id="room_id_display" type="text" value="{{ room.room_id }}" readonly data-copy-text="{{ room.room_id }}" data-copy-success="群 ID 已复制" aria-label="群 ID，点击复制" onclick="return window.codexHandleCopyClick(this)">
                 </div>
                 <div class="stack">
                     <label class="field-label" for="room_name">房间名</label>
@@ -140,7 +200,10 @@
             <div class="quick-action-card stack">
                 <strong>{{ room.name }}</strong>
                 <p>{{ room.description }}</p>
-                <span class="pill pill-muted">群ID：{{ room.room_id }}</span>
+                <button class="copy-chip copy-chip-inline" type="button" data-copy-text="{{ room.room_id }}" data-copy-success="群 ID 已复制" onclick="return window.codexHandleCopyClick(this)">
+                    <span>群ID：{{ room.room_id }}</span>
+                    <span class="copy-chip-status">点击复制</span>
+                </button>
                 <span class="pill pill-muted">入群方式：{{ room.get_join_policy_display }}</span>
                 {% if room.avatar_image %}
                     <span class="pill pill-muted">当前群头像：图片</span>
@@ -347,7 +410,7 @@
         const csrfToken = '{{ csrf_token }}';
         const markRoomReadUrl = '{% url "mark_room_read" room_name %}';
         const userProfileUrlTemplate = '{% url "user_profile" "__username__" %}';
-        const userProfileNextQuery = 'next={{ request.get_full_path|urlencode }}';
+        const userProfileNextQuery = 'next={{ user_profile_next_url|urlencode }}';
         let baseRoomMembers = {{ room_members_json }};
         const isRemovedFromRoom = {{ is_removed_from_room|yesno:"true,false" }};
         let historyOffset = 0;
@@ -365,12 +428,100 @@
         let roomHeartbeatTimeoutTimer = null;
         let roomConnectionNoticeShown = false;
         let isRoomPageUnloading = false;
+        let activeCopyResetTimer = null;
+        let activeCopyTarget = null;
         const roomMessageSignatures = new Set();
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = protocol + '//' + window.location.host + '/ws/chat/' + roomName + '/';
         const loadMoreBtn = document.getElementById('load-more-btn');
         const loadMoreContainer = document.getElementById('load-more-container');
+
+        async function copyTextToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return;
+            }
+
+            const fallbackInput = document.createElement('input');
+            fallbackInput.value = text;
+            fallbackInput.setAttribute('readonly', 'readonly');
+            fallbackInput.style.position = 'fixed';
+            fallbackInput.style.opacity = '0';
+            document.body.appendChild(fallbackInput);
+            fallbackInput.select();
+            fallbackInput.setSelectionRange(0, fallbackInput.value.length);
+
+            const copied = document.execCommand('copy');
+            document.body.removeChild(fallbackInput);
+            if (!copied) {
+                throw new Error('copy_failed');
+            }
+        }
+
+        function updateCopyFeedback(target, successText) {
+            const statusElement = target.querySelector('.copy-chip-status');
+            const originalStatus = target.dataset.originalStatus || statusElement?.textContent || '';
+            target.dataset.originalStatus = originalStatus;
+            if (activeCopyTarget && activeCopyTarget !== target) {
+                activeCopyTarget.classList.remove('is-copied');
+                const previousStatusElement = activeCopyTarget.querySelector('.copy-chip-status');
+                if (previousStatusElement) {
+                    previousStatusElement.textContent = activeCopyTarget.dataset.originalStatus || '点击复制';
+                }
+            }
+            if (statusElement) {
+                statusElement.textContent = successText || target.dataset.copySuccess || '已复制';
+            }
+            target.classList.add('is-copied');
+            activeCopyTarget = target;
+            window.clearTimeout(activeCopyResetTimer);
+            activeCopyResetTimer = window.setTimeout(() => {
+                target.classList.remove('is-copied');
+                if (statusElement) {
+                    statusElement.textContent = originalStatus || '点击复制';
+                }
+                if (activeCopyTarget === target) {
+                    activeCopyTarget = null;
+                }
+            }, 1600);
+        }
+
+        function showCopyToast(message, isError = false) {
+            let toast = document.getElementById('copy-feedback-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'copy-feedback-toast';
+                toast.className = 'copy-feedback-toast';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = message;
+            toast.classList.toggle('is-error', isError);
+            toast.classList.add('is-visible');
+            window.clearTimeout(toast._hideTimer);
+            toast._hideTimer = window.setTimeout(() => {
+                toast.classList.remove('is-visible');
+            }, 1800);
+        }
+
+        function bindCopyTargets() {
+            document.addEventListener('click', async (event) => {
+                const target = event.target.closest('[data-copy-text]');
+                if (!target) return;
+
+                event.preventDefault();
+                const copyText = 'value' in target ? target.value : target.dataset.copyText;
+                if (!copyText) return;
+
+                try {
+                    await copyTextToClipboard(copyText);
+                    updateCopyFeedback(target, target.dataset.copySuccess);
+                    showCopyToast(target.dataset.copySuccess || '已复制');
+                } catch (error) {
+                    showCopyToast('复制失败，请稍后重试', true);
+                }
+            });
+        }
 
         function buildMessageSignature(data, timeStr) {
             return [
@@ -380,6 +531,8 @@
                 typeof data.message === 'string' ? data.message : '',
             ].join('|');
         }
+
+        bindCopyTargets();
 
         function clearRoomHeartbeatTimers() {
             window.clearInterval(roomHeartbeatTimer);

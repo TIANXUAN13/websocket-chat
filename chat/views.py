@@ -2,7 +2,7 @@ import json
 import hashlib
 import io
 import re
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 # chat/views.py
 from asgiref.sync import async_to_sync
@@ -659,6 +659,10 @@ def delete_room(request, room_name):
 def room(request, room_name):
     """具体聊天室页面"""
     embed_mode = request.GET.get('embed') == '1'
+    if embed_mode:
+        user_profile_next_url = f"{reverse('chat_index')}?{urlencode({'thread_type': 'room', 'target': room_name})}"
+    else:
+        user_profile_next_url = request.get_full_path()
 
     def redirect_to_room(target_room_name):
         target_url = reverse('chat_room', args=[target_room_name])
@@ -845,6 +849,7 @@ def room(request, room_name):
         'pending_friend_requests_count': pending_friend_requests_count,
         'inbox_badge_count': pending_friend_requests_count + get_pending_room_invites_queryset(request.user).count(),
         'embed_mode': embed_mode,
+        'user_profile_next_url': user_profile_next_url,
     })
 
 

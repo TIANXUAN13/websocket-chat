@@ -11,6 +11,9 @@ env/
 # Django / SQLite runtime files
 db.sqlite3
 db.sqlite3-journal
+media/avatars/
+media/room_avatars/
+staticfiles/
 
 # Logs
 *.log
