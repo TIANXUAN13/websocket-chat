@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>个人设置</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322c">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322p">
 </head>
 <body class="lobby-page">
     <header class="topbar panel-card">
@@ -41,33 +41,46 @@
         </div>
     {% endif %}
 
-    <main class="lobby-layout">
-        <section class="content-card panel-card profile-settings-card">
-            <div class="content-hero">
+    <main class="settings-layout profile-settings-layout">
+        <aside class="settings-sidebar panel-card">
+            <div class="settings-sidebar-head">
                 <span class="section-label">设置中心</span>
                 <h1>管理你的个人信息与聊天偏好</h1>
-                <p>头像、气泡风格、位置显示等会在你进入的所有房间里自动生效。后续更多账号设置也会继续放在这里。</p>
+                <p>这是独立的个人设置页，改动会同步到你参与的所有群聊和私聊里。</p>
             </div>
 
-            <form class="profile-settings-form" method="post">
+            <div class="profile-preview-panel">
+                <div class="avatar profile-preview-avatar profile-preview-avatar-large">{{ chat_profile.get_avatar_label }}</div>
+                <div class="profile-preview-copy">
+                    <strong>{{ user.username }}</strong>
+                    <span>当前展示头像与昵称预览</span>
+                </div>
+            </div>
+
+            <div class="settings-sidebar-grid">
+                <div class="profile-hint profile-hint-compact">
+                    <strong>当前识别位置</strong>
+                    <span>{% if current_location %}{{ current_location.display_label }}{% else %}暂未识别到位置{% endif %}</span>
+                </div>
+                <div class="profile-hint profile-hint-compact">
+                    <strong>当前好友 ID</strong>
+                    <span>{{ chat_profile.friend_id }}</span>
+                </div>
+            </div>
+
+            <div class="settings-sidebar-note">
+                <strong>这页会影响什么</strong>
+                <p>头像文字、个人介绍、聊天气泡配色和位置展示都会在后续消息里自动生效，不需要逐个房间重复设置。</p>
+            </div>
+        </aside>
+
+        <section class="panel-card profile-settings-main">
+            <form class="profile-settings-form profile-settings-grid" method="post">
                 {% csrf_token %}
                 <section class="settings-section">
                     <div class="settings-section-head">
                         <strong>个人信息</strong>
                         <span>统一管理你的展示身份。</span>
-                    </div>
-                    <div class="profile-info-grid">
-                        <div class="profile-preview-card">
-                            <div class="avatar profile-preview-avatar">{{ chat_profile.get_avatar_label }}</div>
-                            <div class="brand-title">
-                                <strong>{{ user.username }}</strong>
-                                <span>当前展示头像与昵称预览</span>
-                            </div>
-                        </div>
-                        <div class="profile-hint">
-                            <strong>当前识别位置</strong>
-                            <span>{% if current_location %}{{ current_location.display_label }}{% else %}暂未识别到位置{% endif %}</span>
-                        </div>
                     </div>
                     <div class="stack">
                         <label class="field-label" for="friend_id">好友 ID</label>
@@ -85,24 +98,26 @@
 
                 <section class="settings-section">
                     <div class="settings-section-head">
-                        <strong>聊天信息设置</strong>
+                        <strong>聊天外观</strong>
                         <span>这些选项会影响你在所有房间中的消息展示。</span>
                     </div>
-                    <div class="stack">
-                        <label class="field-label" for="color_theme">气泡颜色</label>
-                        <select class="form-input" id="color_theme" name="color_theme">
-                            {% for key, theme in chat_theme_choices %}
-                                <option value="{{ key }}" {% if chat_profile.color_theme == key %}selected{% endif %}>{{ theme.label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="stack">
-                        <label class="field-label" for="bubble_style">气泡样式</label>
-                        <select class="form-input" id="bubble_style" name="bubble_style">
-                            {% for key, style in chat_style_choices %}
-                                <option value="{{ key }}" {% if chat_profile.bubble_style == key %}selected{% endif %}>{{ style.label }}</option>
-                            {% endfor %}
-                        </select>
+                    <div class="settings-two-column">
+                        <div class="stack">
+                            <label class="field-label" for="color_theme">气泡颜色</label>
+                            <select class="form-input" id="color_theme" name="color_theme">
+                                {% for key, theme in chat_theme_choices %}
+                                    <option value="{{ key }}" {% if chat_profile.color_theme == key %}selected{% endif %}>{{ theme.label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="stack">
+                            <label class="field-label" for="bubble_style">气泡样式</label>
+                            <select class="form-input" id="bubble_style" name="bubble_style">
+                                {% for key, style in chat_style_choices %}
+                                    <option value="{{ key }}" {% if chat_profile.bubble_style == key %}selected{% endif %}>{{ style.label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
                     <label class="toggle-row" for="show_location">
                         <span>
@@ -112,6 +127,29 @@
                         <input id="show_location" name="show_location" type="checkbox" {% if chat_profile.show_location %}checked{% endif %}>
                     </label>
                 </section>
+
+                <section class="settings-section">
+                    <div class="settings-section-head">
+                        <strong>实时预览</strong>
+                        <span>这里会根据你当前填写的内容，实时模拟一条你发出去的消息。</span>
+                    </div>
+                    <div class="profile-preview-chat" id="profile-preview-chat">
+                        <div class="profile-preview-message" id="profile-preview-message">
+                            <div class="profile-preview-message-head">
+                                <div class="profile-preview-message-user" id="preview-name">{{ user.username }}</div>
+                                <div class="profile-preview-message-location" id="preview-location">{% if current_location and chat_profile.show_location %}{{ current_location.display_label }}{% endif %}</div>
+                            </div>
+                            <div class="profile-preview-message-body">
+                                <div class="profile-preview-message-avatar" id="preview-avatar">{{ chat_profile.get_avatar_label }}</div>
+                                <div class="profile-preview-bubble" id="preview-bubble">
+                                    <div class="profile-preview-bio" id="preview-bio">{{ chat_profile.bio|default:"你好呀，这里会显示你当前设置下的聊天预览。" }}</div>
+                                    <div class="profile-preview-time">刚刚</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <div class="profile-actions">
                     <button class="btn btn-primary" type="submit">保存个人设置</button>
                     <a href="{% url 'chat_index' %}" class="btn btn-secondary">返回大厅</a>
@@ -119,5 +157,68 @@
             </form>
         </section>
     </main>
+
+    <script>
+        const themeMap = {{ chat_theme_choices_json }};
+        const styleMap = {{ chat_style_choices_json }};
+        const defaultTheme = '{{ default_chat_theme }}';
+        const defaultStyle = '{{ default_chat_style }}';
+        const currentLocationLabel = '{% if current_location %}{{ current_location.display_label|escapejs }}{% endif %}';
+        const username = '{{ user.username|escapejs }}';
+
+        const avatarInput = document.getElementById('avatar_label');
+        const bioInput = document.getElementById('bio');
+        const themeSelect = document.getElementById('color_theme');
+        const styleSelect = document.getElementById('bubble_style');
+        const showLocationInput = document.getElementById('show_location');
+        const previewAvatar = document.getElementById('preview-avatar');
+        const previewName = document.getElementById('preview-name');
+        const previewBio = document.getElementById('preview-bio');
+        const previewBubble = document.getElementById('preview-bubble');
+        const previewLocation = document.getElementById('preview-location');
+
+        function buildAvatarLabel(rawValue) {
+            const trimmed = (rawValue || '').trim();
+            if (trimmed) {
+                return trimmed.slice(0, 6);
+            }
+            if (/[\u4e00-\u9fff]/.test(username)) {
+                return username.slice(0, 2);
+            }
+            return username.slice(0, 2).toUpperCase();
+        }
+
+        function updateProfilePreview() {
+            const theme = themeMap[themeSelect.value] || themeMap[defaultTheme];
+            const style = styleMap[styleSelect.value] || styleMap[defaultStyle];
+            const avatarLabel = buildAvatarLabel(avatarInput.value);
+            const bioText = (bioInput.value || '').trim() || '你好呀，这里会显示你当前设置下的聊天预览。';
+
+            previewAvatar.textContent = avatarLabel;
+            previewName.textContent = username;
+            previewBio.textContent = bioText;
+            previewLocation.textContent = showLocationInput.checked ? currentLocationLabel : '';
+            previewLocation.hidden = !showLocationInput.checked || !currentLocationLabel;
+
+            previewBubble.style.background = theme.bubble_bg;
+            previewBubble.style.color = theme.bubble_text;
+            previewBubble.style.border = style.border;
+            previewBubble.style.borderRadius = style.radius;
+            previewBubble.style.boxShadow = style.shadow;
+            previewBubble.style.backdropFilter = style.backdrop_filter;
+
+            previewAvatar.style.background = theme.bubble_bg;
+            previewAvatar.style.color = theme.bubble_text;
+            previewAvatar.style.border = style.border;
+            previewAvatar.style.boxShadow = style.shadow;
+        }
+
+        [avatarInput, bioInput, themeSelect, styleSelect, showLocationInput].forEach((field) => {
+            field.addEventListener('input', updateProfilePreview);
+            field.addEventListener('change', updateProfilePreview);
+        });
+
+        updateProfilePreview();
+    </script>
 </body>
 </html>
