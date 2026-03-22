@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322r">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322s">
 </head>
 <body class="lobby-page app-hub-page">
     <header class="topbar panel-card">
@@ -84,6 +84,7 @@
                             type="button"
                             class="thread-list-item unified-thread-item{% if active_thread and active_thread.type == item.type and active_thread.name == item.name %} active{% endif %}"
                             data-thread-url="{{ item.embed_url }}"
+                            data-thread-full-url="{{ item.url }}"
                             data-thread-name="{{ item.name }}"
                             data-thread-type="{{ item.type }}"
                             data-thread-target="{{ item.name }}"
@@ -331,9 +332,20 @@
         const threadItems = Array.from(document.querySelectorAll('.unified-thread-item'));
         const conversationFrame = document.getElementById('conversation-frame');
         const emptyChatShell = document.getElementById('empty-chat-shell');
+        const mobileThreadMedia = window.matchMedia('(max-width: 720px)');
         let activeThreadUrl = conversationFrame && conversationFrame.getAttribute('src')
             ? conversationFrame.getAttribute('src')
             : '';
+
+        function isMobileThreadLayout() {
+            return mobileThreadMedia.matches;
+        }
+
+        function openThreadPage(item) {
+            const threadFullUrl = item.dataset.threadFullUrl || '';
+            if (!threadFullUrl) return;
+            window.location.href = threadFullUrl;
+        }
 
         function updateThreadQuery(item) {
             const nextUrl = new URL(window.location.href);
@@ -382,6 +394,10 @@
 
         threadItems.forEach((item) => {
             item.addEventListener('click', () => {
+                if (isMobileThreadLayout()) {
+                    openThreadPage(item);
+                    return;
+                }
                 const threadUrl = item.dataset.threadUrl;
                 if (activeThreadUrl === threadUrl && item.classList.contains('active')) {
                     showEmptyState();
@@ -390,6 +406,13 @@
                 showThread(item);
             });
         });
+
+        if (isMobileThreadLayout()) {
+            const initiallyActiveThread = document.querySelector('.unified-thread-item.active');
+            if (initiallyActiveThread) {
+                openThreadPage(initiallyActiveThread);
+            }
+        }
 
         const quickActionTrigger = document.getElementById('quick-action-trigger');
         const quickActionMenu = document.getElementById('quick-action-menu');

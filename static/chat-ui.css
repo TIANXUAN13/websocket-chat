@@ -3359,6 +3359,10 @@ code {
         align-self: flex-start;
     }
 
+    .app-hub-page .content-card-feed[data-panel="lobby"] {
+        display: none;
+    }
+
     .chat-input-area {
         grid-template-columns: 1fr;
     }

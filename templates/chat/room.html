@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ room_name }} - 聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322r">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322s">
 </head>
 <body class="room-page{% if embed_mode %} embed-chat-page{% endif %}">
     {% if not embed_mode %}
@@ -24,7 +24,7 @@
                     <span>{{ room.description }}</span>
                     <div class="room-stats-inline">
                         <span class="pill pill-muted">总人数 <strong id="total-member-count">{{ room_total_members }}</strong></span>
-                        <span class="pill pill-muted">在线人数 <strong id="online-member-count">1</strong></span>
+                        <span class="pill pill-muted">在线人数 <strong id="online-member-count">{{ room_online_members }}</strong></span>
                         {% if is_owner %}
                             <span class="pill pill-owner">房主</span>
                         {% endif %}
@@ -48,35 +48,33 @@
                     <circle cx="12" cy="12" r="3.2"/>
                 </svg>
             </a>
-            {% if is_owner %}
-                <button class="settings-trigger" type="button" onclick="toggleRoomSettings()" aria-label="房间设置">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                        <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
-                        <circle cx="12" cy="12" r="3.2"/>
-                    </svg>
-                </button>
-            {% endif %}
+            <button class="settings-trigger" type="button" onclick="toggleRoomSettings()" aria-label="{% if is_owner %}房间设置{% else %}群成员与设置{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
+                    <circle cx="12" cy="12" r="3.2"/>
+                </svg>
+            </button>
             <div class="status-dot" id="status-dot"></div>
             <span id="status-text">连接中</span>
         </div>
     </header>
     {% endif %}
 
-    {% if is_owner %}
-        <div class="settings-overlay" id="settings-overlay" onclick="toggleRoomSettings(false)"></div>
-        <aside class="room-settings-drawer panel-card" id="room-settings-drawer">
-            <div class="drawer-head">
-                <div>
-                    <strong>房间设置</strong>
-                    <span>修改群资料或执行房间管理操作</span>
-                </div>
-                <button class="drawer-close" type="button" onclick="toggleRoomSettings(false)" aria-label="关闭设置">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 6L6 18M6 6l12 12"/>
-                    </svg>
-                </button>
+    <div class="settings-overlay" id="settings-overlay" onclick="toggleRoomSettings(false)"></div>
+    <aside class="room-settings-drawer panel-card" id="room-settings-drawer">
+        <div class="drawer-head">
+            <div>
+                <strong>{% if is_owner %}房间设置{% else %}群成员与资料{% endif %}</strong>
+                <span>{% if is_owner %}修改群资料或执行房间管理操作{% else %}查看当前群成员与在线状态{% endif %}</span>
             </div>
+            <button class="drawer-close" type="button" onclick="toggleRoomSettings(false)" aria-label="关闭设置">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
 
+        {% if is_owner %}
             <form class="room-settings-form" method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="room_settings">
@@ -98,32 +96,39 @@
                 </div>
                 <button class="btn btn-secondary" type="submit">保存资料</button>
             </form>
+        {% else %}
+            <div class="quick-action-card stack">
+                <strong>{{ room.name }}</strong>
+                <p>{{ room.description }}</p>
+            </div>
+        {% endif %}
 
-            <div class="settings-section">
-                <div class="settings-section-head">
-                    <strong>群成员管理</strong>
-                    <span>这里会显示全部群成员，在线状态会实时更新，房主可以直接移出在线成员。</span>
-                </div>
-                <div class="panel-title">
-                    <strong>群成员</strong>
-                    <span class="pill pill-muted" id="member-count">{{ room_total_members }} 人</span>
-                </div>
-                <div class="user-list" id="user-list">
-                    <div class="user-item">
-                        <div class="user-item-left">
-                            <div class="mini-avatar">{{ chat_profile.get_avatar_label }}</div>
-                            <span class="user-name-text">{{ user.username }}</span>
-                        </div>
-                        <span class="pill pill-owner">你</span>
+        <div class="settings-section">
+            <div class="settings-section-head">
+                <strong>{% if is_owner %}群成员管理{% else %}群成员列表{% endif %}</strong>
+                <span>{% if is_owner %}这里会显示全部群成员，在线状态会实时更新，房主可以直接移出在线成员。{% else %}这里会显示全部群成员，在线状态会实时更新。{% endif %}</span>
+            </div>
+            <div class="panel-title">
+                <strong>群成员</strong>
+                <span class="pill pill-muted" id="member-count">{{ room_total_members }} 人</span>
+            </div>
+            <div class="user-list" id="user-list">
+                <div class="user-item">
+                    <div class="user-item-left">
+                        <div class="mini-avatar">{{ chat_profile.get_avatar_label }}</div>
+                        <span class="user-name-text">{{ user.username }}</span>
                     </div>
+                    <span class="pill pill-owner">你</span>
                 </div>
             </div>
+        </div>
 
+        {% if is_owner %}
             <div class="drawer-actions">
                 <button class="btn btn-danger" type="button" onclick="deleteRoom()">删除房间</button>
             </div>
-        </aside>
-    {% endif %}
+        {% endif %}
+    </aside>
 
     <main class="{% if embed_mode %}embed-chat-layout{% else %}room-layout{% endif %}">
         <section class="chat-main panel-card{% if embed_mode %} embed-chat-main{% endif %}">
@@ -132,16 +137,14 @@
                 <div class="embed-room-toolbar">
                     <div class="room-stats-inline">
                         <span class="pill pill-muted">总人数 <strong id="total-member-count">{{ room_total_members }}</strong></span>
-                        <span class="pill pill-muted">在线人数 <strong id="online-member-count">1</strong></span>
+                        <span class="pill pill-muted">在线人数 <strong id="online-member-count">{{ room_online_members }}</strong></span>
                     </div>
-                    {% if is_owner %}
-                        <button class="settings-trigger" type="button" onclick="toggleRoomSettings()" aria-label="群聊设置">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                                <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
-                                <circle cx="12" cy="12" r="3.2"/>
-                            </svg>
-                        </button>
-                    {% endif %}
+                    <button class="settings-trigger" type="button" onclick="toggleRoomSettings()" aria-label="{% if is_owner %}群聊设置{% else %}群成员与设置{% endif %}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
+                            <circle cx="12" cy="12" r="3.2"/>
+                        </svg>
+                    </button>
                 </div>
                 {% else %}
                 <div>
@@ -417,7 +420,7 @@
                     friend_id: member.friend_id,
                     is_owner: !!member.is_owner,
                     is_self: !!member.is_self,
-                    is_online: !!onlineMap[member.username],
+                    is_online: typeof member.is_online === 'boolean' ? member.is_online : !!onlineMap[member.username],
                 });
             });
 
@@ -428,7 +431,7 @@
                     friend_id: '',
                     is_owner: false,
                     is_self: name === username,
-                    is_online: true,
+                    is_online: typeof meta.is_online === 'boolean' ? meta.is_online : true,
                 };
                 merged.set(name, {
                     ...previous,
@@ -436,7 +439,7 @@
                     friend_id: meta.friend_id || previous.friend_id,
                     is_owner: !!meta.is_owner || previous.is_owner,
                     is_self: previous.is_self || name === username,
-                    is_online: true,
+                    is_online: typeof meta.is_online === 'boolean' ? meta.is_online : true,
                 });
             });
 
@@ -449,15 +452,21 @@
         }
 
         function updateUserList(users) {
-            if (!userList || !memberCount || !onlineMemberCount) {
-                return;
-            }
             currentOnlineUsers = users || {};
             const entries = buildMemberEntries(currentOnlineUsers);
-            const onlineCount = Object.keys(currentOnlineUsers).length;
+            const onlineCount = entries.filter((entry) => entry.is_online).length;
+
+            if (memberCount) {
+                memberCount.textContent = `${entries.length} 人`;
+            }
+            if (onlineMemberCount) {
+                onlineMemberCount.textContent = `${onlineCount}`;
+            }
+            if (!userList) {
+                return;
+            }
+
             userList.innerHTML = '';
-            memberCount.textContent = `${entries.length} 人`;
-            onlineMemberCount.textContent = `${onlineCount}`;
 
             for (const meta of entries) {
                 const user = meta.username;

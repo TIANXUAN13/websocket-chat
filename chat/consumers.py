@@ -313,7 +313,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
     async def broadcast_user_list(self):
-        users = self.get_users_dict()
+        users = await self.get_users_dict()
         await self.channel_layer.group_send(
             self.room_group_name,
             {
@@ -322,17 +322,59 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }
         )
 
+    @database_sync_to_async
     def get_users_dict(self):
+        from .models import Room, RoomMembership, UserSession
+
+        connected_users = {}
         if self.room_name in self.room_users:
-            return {
-                v['username']: {
-                    'is_owner': v['is_owner'],
-                    'avatar_label': v.get('avatar_label', self.get_avatar_label_for_username(v['username'])),
-                    'friend_id': v.get('friend_id', ''),
-                }
-                for v in self.room_users[self.room_name].values()
+            connected_users = {
+                value['username']: value
+                for value in self.room_users[self.room_name].values()
             }
-        return {}
+
+        try:
+            room = Room.objects.get(name=self.room_name)
+        except Room.DoesNotExist:
+            return {
+                username: {
+                    'is_owner': bool(meta.get('is_owner')),
+                    'avatar_label': meta.get('avatar_label', self.get_avatar_label_for_username(username)),
+                    'friend_id': meta.get('friend_id', ''),
+                    'is_online': True,
+                }
+                for username, meta in connected_users.items()
+            }
+
+        memberships = RoomMembership.objects.filter(
+            room=room,
+            is_active=True,
+        ).select_related('user', 'user__chat_profile')
+        online_user_ids = set(UserSession.objects.values_list('user_id', flat=True))
+        users = {}
+
+        for membership in memberships:
+            linked_user = membership.user
+            profile = getattr(linked_user, 'chat_profile', None) or self.get_or_create_profile(linked_user)
+            connected_meta = connected_users.get(linked_user.username, {})
+            users[linked_user.username] = {
+                'is_owner': bool(room.created_by_id == linked_user.id),
+                'avatar_label': connected_meta.get('avatar_label', profile.get_avatar_label()),
+                'friend_id': connected_meta.get('friend_id', profile.friend_id),
+                'is_online': linked_user.id in online_user_ids,
+            }
+
+        for username, meta in connected_users.items():
+            if username in users:
+                continue
+            users[username] = {
+                'is_owner': bool(meta.get('is_owner')),
+                'avatar_label': meta.get('avatar_label', self.get_avatar_label_for_username(username)),
+                'friend_id': meta.get('friend_id', ''),
+                'is_online': True,
+            }
+
+        return users
 
     @database_sync_to_async
     def is_removed_from_room(self):
@@ -421,6 +463,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'type': 'user_list',
             'users': event['users']
         }))
+
+    async def presence_refresh(self, event):
+        await self.broadcast_user_list()
 
     async def kick_message(self, event):
         self.read_only_removed = True

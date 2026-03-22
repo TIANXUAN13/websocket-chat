@@ -1,7 +1,10 @@
 import json
+import hashlib
 from urllib.parse import quote
 
 # chat/views.py
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.contrib.auth import login, logout, update_session_auth_hash
@@ -41,6 +44,31 @@ from .services.geoip_service import GeoIPService
 
 
 DEFAULT_ROOM_AVATARS = ['💬', '🐱', '🐶', '🐻', '🎮', '📚', '☕', '🌙', '🎵', '🍀']
+
+
+def build_room_group_name(room_name):
+    return f"chat_{hashlib.sha256(room_name.encode('utf-8')).hexdigest()[:32]}"
+
+
+def notify_user_presence_changed(user):
+    if not user or not user.is_authenticated:
+        return
+
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+
+    room_names = Room.objects.filter(
+        Q(created_by=user) | Q(memberships__user=user, memberships__is_active=True)
+    ).values_list('name', flat=True).distinct()
+
+    for room_name in room_names:
+        async_to_sync(channel_layer.group_send)(
+            build_room_group_name(room_name),
+            {
+                'type': 'presence_refresh',
+            }
+        )
 
 
 def get_or_create_chat_profile(user):
@@ -198,6 +226,7 @@ def build_room_member_records(room, current_user):
     member_records = []
     try:
         active_memberships = room.memberships.filter(is_active=True).select_related('user', 'user__chat_profile')
+        online_user_ids = set(UserSession.objects.values_list('user_id', flat=True))
 
         if not active_memberships.exists():
             fallback_usernames = set(room.messages.exclude(username='').values_list('username', flat=True))
@@ -217,6 +246,7 @@ def build_room_member_records(room, current_user):
                 'friend_id': profile.friend_id,
                 'is_owner': bool(room.created_by and room.created_by_id == linked_user.id),
                 'is_self': bool(current_user and current_user.id == linked_user.id),
+                'is_online': linked_user.id in online_user_ids,
             })
     except (OperationalError, ProgrammingError):
         usernames = set(room.messages.exclude(username='').values_list('username', flat=True))
@@ -238,6 +268,7 @@ def build_room_member_records(room, current_user):
                 'friend_id': profile.friend_id if profile else '',
                 'is_owner': bool(room.created_by and room.created_by.username == username),
                 'is_self': bool(current_user and current_user.username == username),
+                'is_online': bool(linked_user and linked_user.sessions.exists()),
             })
 
     member_records.sort(key=lambda item: (
@@ -283,6 +314,7 @@ def login_view(request):
             except Exception as e:
                 # 如果创建失败，记录错误但不阻止登录
                 print(f"创建 UserSession 记录时出错: {e}")
+            notify_user_presence_changed(user)
             
             # 获取并保存用户地理位置信息
             try:
@@ -342,6 +374,7 @@ def register_view(request):
             except Exception as e:
                 # 如果创建失败，记录错误但不阻止登录
                 print(f"创建 UserSession 记录时出错: {e}")
+            notify_user_presence_changed(user)
             
             # 获取并保存用户地理位置信息
             try:
@@ -510,6 +543,7 @@ def room(request, room_name):
 
     chat_profile = get_or_create_chat_profile(request.user)
     room_membership, _ = get_or_create_room_membership(room, request.user)
+    room_member_records = build_room_member_records(room, request.user)
     visit_state = get_or_create_room_visit_state(request.user, room)
     visit_state.last_read_at = timezone.now()
     visit_state.save(update_fields=['last_read_at'])
@@ -525,7 +559,8 @@ def room(request, room_name):
         'room_name': room.name,
         'room_name_json': mark_safe(json.dumps(room.name)),
         'room_total_members': room.total_members,
-        'room_members_json': mark_safe(json.dumps(build_room_member_records(room, request.user))),
+        'room_online_members': sum(1 for item in room_member_records if item.get('is_online')),
+        'room_members_json': mark_safe(json.dumps(room_member_records)),
         'is_removed_from_room': bool(room_membership and (not room_membership.is_active) and room.created_by_id != request.user.id),
         'is_owner': is_owner,
         'chat_profile': chat_profile,
@@ -1065,6 +1100,7 @@ def logout_view(request):
     """注销登录"""
     if request.user.is_authenticated:
         UserSession.objects.filter(user=request.user).delete()
+        notify_user_presence_changed(request.user)
     logout(request)
     return redirect('login')
 
