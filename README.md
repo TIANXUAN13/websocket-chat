@@ -27,8 +27,6 @@ python manage.py runserver 0.0.0.0:8000
 ./start.sh
 ```
 
-如果你需要 WebSocket 聊天功能，优先使用 `./start.sh`。当前它会使用已启用 ASGI 的 `runserver`，这样开发环境下 WebSocket 和静态文件都能正常工作。
-
 启动后访问：
 
 ```text
@@ -42,6 +40,58 @@ http://127.0.0.1:8000/chat/login/
 ```bash
 daphne -b 0.0.0.0 -p 8000 websocket_project.asgi:application
 ```
+
+## Linux systemd 部署
+
+项目内置了 `systemd` 安装脚本，可以自动生成服务并控制启停：
+
+```bash
+chmod +x scripts/run_linux_service.sh scripts/systemd_service.sh
+./scripts/systemd_service.sh install
+```
+
+如果你希望服务以指定用户运行，例如 `www-data`：
+
+```bash
+APP_USER=www-data APP_GROUP=www-data ./scripts/systemd_service.sh install
+```
+
+常用命令：
+
+```bash
+./scripts/systemd_service.sh start
+./scripts/systemd_service.sh stop
+./scripts/systemd_service.sh restart
+./scripts/systemd_service.sh status
+./scripts/systemd_service.sh enable
+./scripts/systemd_service.sh disable
+./scripts/systemd_service.sh logs
+./scripts/systemd_service.sh config
+./scripts/systemd_service.sh uninstall
+```
+
+可选环境变量：
+
+```bash
+SERVICE_NAME=websocket-chat
+APP_USER=www-data
+APP_GROUP=www-data
+VENV_PATH=.venv
+BIND_HOST=0.0.0.0
+PORT=8000
+APP_MODULE=websocket_project.asgi:application
+MIGRATE_ON_START=1
+```
+
+脚本会自动：
+
+- 创建虚拟环境
+- 安装 `requirements.txt` 依赖
+- 执行数据库迁移
+- 生成 `/etc/systemd/system/websocket-chat.service`
+- 生成 `/etc/default/websocket-chat`
+- 执行 `systemctl enable` 并启动服务
+
 
 ## 当前最小依赖
 
