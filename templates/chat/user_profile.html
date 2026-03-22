@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ target_user.username }} 的资料</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322u">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
 </head>
 <body class="lobby-page mobile-compact-shell">
     <header class="topbar panel-card">
@@ -51,7 +51,13 @@
     <main class="lobby-layout profile-shell">
         <aside class="sidebar-card panel-card">
             <div class="profile-card-large">
-                <div class="avatar profile-detail-avatar">{{ target_profile.get_avatar_label }}</div>
+                <div class="avatar profile-detail-avatar{% if target_profile.avatar_image %} has-photo{% endif %}">
+                    {% if target_profile.avatar_image %}
+                        <img class="avatar-photo" src="{{ target_profile.avatar_image.url }}" alt="{{ target_user.username }} 的头像">
+                    {% else %}
+                        {{ target_profile.get_avatar_label }}
+                    {% endif %}
+                </div>
                 <div class="profile-detail-text">
                     <h1>{{ target_user.username }}</h1>
                     <div class="profile-meta-list">

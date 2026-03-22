@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>个人设置</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322u">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
 </head>
 <body class="lobby-page mobile-compact-shell">
     <header class="topbar panel-card">
@@ -23,7 +23,13 @@
         </div>
         <div class="topbar-group">
             <div class="user-chip">
-                <div class="avatar">{{ chat_profile.get_avatar_label }}</div>
+                <div class="avatar{% if chat_profile.avatar_image %} has-photo{% endif %}">
+                    {% if chat_profile.avatar_image %}
+                        <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像">
+                    {% else %}
+                        {{ chat_profile.get_avatar_label }}
+                    {% endif %}
+                </div>
                 <div class="brand-title">
                     <strong>{{ user.username }}</strong>
                     <span>这些设置是你自己的，不属于某个房间。</span>
@@ -50,7 +56,13 @@
             </div>
 
             <div class="profile-preview-panel">
-                <div class="avatar profile-preview-avatar profile-preview-avatar-large">{{ chat_profile.get_avatar_label }}</div>
+                <div class="avatar profile-preview-avatar profile-preview-avatar-large{% if chat_profile.avatar_image %} has-photo{% endif %}" id="profile-preview-avatar">
+                    {% if chat_profile.avatar_image %}
+                        <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像">
+                    {% else %}
+                        {{ chat_profile.get_avatar_label }}
+                    {% endif %}
+                </div>
                 <div class="profile-preview-copy">
                     <strong>{{ user.username }}</strong>
                     <span>当前展示头像与昵称预览</span>
@@ -75,7 +87,7 @@
         </aside>
 
         <section class="panel-card profile-settings-main">
-            <form class="profile-settings-form profile-settings-grid" method="post">
+            <form class="profile-settings-form profile-settings-grid" method="post" enctype="multipart/form-data">
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="profile">
                 <section class="settings-section">
@@ -90,6 +102,18 @@
                     <div class="stack">
                         <label class="field-label" for="avatar_label">头像文字</label>
                         <input class="form-input" id="avatar_label" name="avatar_label" type="text" maxlength="24" value="{{ chat_profile.avatar_label }}" placeholder="留空时默认使用用户名的前两位">
+                    </div>
+                    <div class="avatar-upload-row">
+                        <label class="field-label" for="avatar_image">头像图片</label>
+                        <input class="form-input" id="avatar_image" name="avatar_image" type="file" accept="image/png,image/jpeg,image/webp">
+                        <label class="toggle-row" for="remove_avatar_image">
+                            <span>
+                                <strong>移除当前头像图片</strong>
+                                <small>如果不勾选，就会继续保留当前头像图片。</small>
+                            </span>
+                            <input id="remove_avatar_image" name="remove_avatar_image" type="checkbox">
+                        </label>
+                        <div class="avatar-upload-help">支持 JPG、PNG、WebP。服务器会自动压缩，尽量控制在 1MB 内。</div>
                     </div>
                     <div class="stack">
                         <label class="field-label" for="bio">个人介绍</label>
@@ -141,7 +165,13 @@
                                 <div class="profile-preview-message-location" id="preview-location">{% if current_location and chat_profile.show_location %}{{ current_location.display_label }}{% endif %}</div>
                             </div>
                             <div class="profile-preview-message-body">
-                                <div class="profile-preview-message-avatar" id="preview-avatar">{{ chat_profile.get_avatar_label }}</div>
+                                <div class="profile-preview-message-avatar{% if chat_profile.avatar_image %} has-photo{% endif %}" id="preview-avatar">
+                                    {% if chat_profile.avatar_image %}
+                                        <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像预览">
+                                    {% else %}
+                                        {{ chat_profile.get_avatar_label }}
+                                    {% endif %}
+                                </div>
                                 <div class="profile-preview-bubble" id="preview-bubble">
                                     <div class="profile-preview-bio" id="preview-bio">{{ chat_profile.bio|default:"你好呀，这里会显示你当前设置下的聊天预览。" }}</div>
                                     <div class="profile-preview-time">刚刚</div>
@@ -212,11 +242,15 @@
         const themeSelect = document.getElementById('color_theme');
         const styleSelect = document.getElementById('bubble_style');
         const showLocationInput = document.getElementById('show_location');
+        const avatarImageInput = document.getElementById('avatar_image');
+        const removeAvatarImageInput = document.getElementById('remove_avatar_image');
+        const profilePreviewAvatar = document.getElementById('profile-preview-avatar');
         const previewAvatar = document.getElementById('preview-avatar');
         const previewName = document.getElementById('preview-name');
         const previewBio = document.getElementById('preview-bio');
         const previewBubble = document.getElementById('preview-bubble');
         const previewLocation = document.getElementById('preview-location');
+        const currentAvatarUrl = '{{ chat_profile.avatar_url|escapejs }}';
 
         function buildAvatarLabel(rawValue) {
             const trimmed = (rawValue || '').trim();
@@ -254,12 +288,50 @@
             previewAvatar.style.boxShadow = style.shadow;
         }
 
+        function setAvatarPreview(targetElement, imageUrl, fallbackLabel) {
+            if (!targetElement) return;
+            if (imageUrl) {
+                targetElement.classList.add('has-photo');
+                targetElement.innerHTML = `<img class="avatar-photo" src="${imageUrl}" alt="头像预览">`;
+                return;
+            }
+            targetElement.classList.remove('has-photo');
+            targetElement.textContent = fallbackLabel;
+        }
+
+        function syncAvatarPreview() {
+            const avatarLabel = buildAvatarLabel(avatarInput.value);
+            if (removeAvatarImageInput && removeAvatarImageInput.checked) {
+                setAvatarPreview(profilePreviewAvatar, '', avatarLabel);
+                setAvatarPreview(previewAvatar, '', avatarLabel);
+                return;
+            }
+
+            const file = avatarImageInput && avatarImageInput.files ? avatarImageInput.files[0] : null;
+            if (file) {
+                const objectUrl = URL.createObjectURL(file);
+                setAvatarPreview(profilePreviewAvatar, objectUrl, avatarLabel);
+                setAvatarPreview(previewAvatar, objectUrl, avatarLabel);
+                return;
+            }
+
+            setAvatarPreview(profilePreviewAvatar, currentAvatarUrl, avatarLabel);
+            setAvatarPreview(previewAvatar, currentAvatarUrl, avatarLabel);
+        }
+
         [avatarInput, bioInput, themeSelect, styleSelect, showLocationInput].forEach((field) => {
             field.addEventListener('input', updateProfilePreview);
             field.addEventListener('change', updateProfilePreview);
         });
+        if (avatarImageInput) {
+            avatarImageInput.addEventListener('change', syncAvatarPreview);
+        }
+        if (removeAvatarImageInput) {
+            removeAvatarImageInput.addEventListener('change', syncAvatarPreview);
+        }
 
         updateProfilePreview();
+        syncAvatarPreview();
     </script>
 </body>
 </html>

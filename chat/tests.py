@@ -1,6 +1,10 @@
+import io
+
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
+from PIL import Image
 from unittest.mock import patch
 
 from .consumers import ChatConsumer
@@ -64,6 +68,32 @@ class ChatAppearanceTests(TestCase):
         self.assertEqual(profile.color_theme, 'ocean')
         self.assertEqual(profile.bubble_style, 'glass')
         self.assertTrue(profile.show_location)
+
+    def test_profile_settings_can_upload_avatar_image(self):
+        self.login_with_valid_session()
+        image_buffer = io.BytesIO()
+        Image.new('RGB', (1200, 1200), color=(210, 120, 80)).save(image_buffer, format='JPEG', quality=95)
+        image_buffer.seek(0)
+        uploaded_file = SimpleUploadedFile('avatar.jpg', image_buffer.getvalue(), content_type='image/jpeg')
+
+        response = self.client.post(
+            reverse('profile_settings'),
+            {
+                'friend_id': 'alice001',
+                'avatar_label': '阿来',
+                'bio': '测试头像上传',
+                'color_theme': 'ocean',
+                'bubble_style': 'glass',
+                'show_location': 'on',
+                'avatar_image': uploaded_file,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        profile = UserChatProfile.objects.get(user=self.user)
+        self.assertTrue(bool(profile.avatar_image))
+        self.assertTrue(profile.avatar_url)
+        self.assertLessEqual(profile.avatar_image.size, 1024 * 1024)
 
     @patch('chat.views.GeoIPService.save_precise_user_location')
     def test_update_precise_location_endpoint(self, save_precise_user_location):
@@ -292,6 +322,22 @@ class ChatMessageSerializationTests(TestCase):
         payload = self.consumer.save_message.__wrapped__(self.consumer, '带头像', self.user.username)
 
         self.assertEqual(payload['avatar_label'], '小明')
+
+    def test_avatar_url_is_included_in_message_payload(self):
+        image_buffer = io.BytesIO()
+        Image.new('RGB', (120, 120), color=(120, 160, 210)).save(image_buffer, format='JPEG', quality=88)
+        image_buffer.seek(0)
+        profile = UserChatProfile.objects.create(user=self.user, color_theme='rose', bubble_style='soft', show_location=False)
+        profile.avatar_image.save(
+            'avatars/test-avatar.jpg',
+            SimpleUploadedFile('avatar.jpg', image_buffer.getvalue(), content_type='image/jpeg'),
+            save=True,
+        )
+        self.consumer.scope = {'user': self.user}
+
+        payload = self.consumer.save_message.__wrapped__(self.consumer, '带图头像', self.user.username)
+
+        self.assertIn('/media/avatars/', payload['avatar_url'])
 
     def test_display_label_avoids_duplicate_city_names(self):
         location = UserLocation.objects.create(

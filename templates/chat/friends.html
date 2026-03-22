@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>好友</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322u">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
 </head>
 <body class="lobby-page app-hub-page mobile-compact-shell">
     <header class="topbar panel-card">
@@ -53,7 +53,13 @@
                 {% if friends %}
                     {% for item in friends %}
                         <a href="{% url 'inbox' %}?thread_type=direct&target={{ item.friend.username|urlencode }}" class="friend-list-item friend-list-item-simple">
-                            <div class="mini-avatar">{{ item.friend.chat_profile.get_avatar_label|default:item.friend.username|slice:":2" }}</div>
+                            <div class="mini-avatar{% if item.friend.chat_profile.avatar_image %} has-photo{% endif %}">
+                                {% if item.friend.chat_profile.avatar_image %}
+                                    <img class="avatar-photo" src="{{ item.friend.chat_profile.avatar_image.url }}" alt="{{ item.friend.username }} 的头像">
+                                {% else %}
+                                    {{ item.friend.chat_profile.get_avatar_label|default:item.friend.username|slice:":2" }}
+                                {% endif %}
+                            </div>
                             <strong class="room-title">{{ item.friend.username }}</strong>
                         </a>
                     {% endfor %}

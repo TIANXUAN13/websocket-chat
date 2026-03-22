@@ -48,6 +48,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'username': self.user,
                 'is_owner': await self.check_is_owner(),
                 'avatar_label': await self.get_user_avatar_label(),
+                'avatar_url': await self.get_user_avatar_url(),
                 'friend_id': await self.get_user_friend_id(),
             }
 
@@ -136,6 +137,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'username': self.user,
                 'is_owner': await self.check_is_owner(),
                 'avatar_label': await self.get_user_avatar_label(),
+                'avatar_url': await self.get_user_avatar_url(),
                 'friend_id': await self.get_user_friend_id(),
             }
         await self.broadcast_user_list()
@@ -340,6 +342,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 username: {
                     'is_owner': bool(meta.get('is_owner')),
                     'avatar_label': meta.get('avatar_label', self.get_avatar_label_for_username(username)),
+                    'avatar_url': meta.get('avatar_url', ''),
                     'friend_id': meta.get('friend_id', ''),
                     'is_online': True,
                 }
@@ -360,6 +363,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             users[linked_user.username] = {
                 'is_owner': bool(room.created_by_id == linked_user.id),
                 'avatar_label': connected_meta.get('avatar_label', profile.get_avatar_label()),
+                'avatar_url': connected_meta.get('avatar_url', profile.avatar_url),
                 'friend_id': connected_meta.get('friend_id', profile.friend_id),
                 'is_online': linked_user.id in online_user_ids,
             }
@@ -370,6 +374,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             users[username] = {
                 'is_owner': bool(meta.get('is_owner')),
                 'avatar_label': meta.get('avatar_label', self.get_avatar_label_for_username(username)),
+                'avatar_url': meta.get('avatar_url', ''),
                 'friend_id': meta.get('friend_id', ''),
                 'is_online': True,
             }
@@ -489,6 +494,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def get_default_appearance(self):
         return {
             'avatar_label': self.get_avatar_label_for_username('用户'),
+            'avatar_url': '',
             'theme': DEFAULT_CHAT_THEME,
             'style': DEFAULT_CHAT_STYLE,
             'bubble_bg': 'linear-gradient(135deg, #c96c43 0%, #9d4528 100%)',
@@ -536,6 +542,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'location': location_label,
             'appearance': appearance,
             'avatar_label': avatar_label,
+            'avatar_url': appearance.get('avatar_url', ''),
             'friend_id': appearance.get('friend_id', ''),
         }
 
@@ -553,6 +560,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if user and user.is_authenticated:
             profile = self.get_or_create_profile(user)
             return profile.friend_id
+        return ''
+
+    @database_sync_to_async
+    def get_user_avatar_url(self):
+        user = self.scope.get('user')
+        if user and user.is_authenticated:
+            profile = self.get_or_create_profile(user)
+            return profile.avatar_url
         return ''
 
     def get_avatar_label_for_username(self, username):
@@ -676,6 +691,7 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
             'user': self.current_user.username,
             'timestamp': direct_message.created_at.isoformat(),
             'avatar_label': profile.get_avatar_label(),
+            'avatar_url': profile.avatar_url,
             'appearance': profile.to_payload(),
         }
 

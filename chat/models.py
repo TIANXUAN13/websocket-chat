@@ -78,6 +78,7 @@ class UserChatProfile(models.Model):
         ],
     )
     avatar_label = models.CharField(max_length=24, blank=True, default='', verbose_name='头像文本')
+    avatar_image = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name='头像图片')
     bio = models.CharField(max_length=160, blank=True, default='', verbose_name='个人介绍')
     color_theme = models.CharField(
         max_length=20,
@@ -98,10 +99,20 @@ class UserChatProfile(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.color_theme}/{self.bubble_style}"
 
+    @property
+    def avatar_url(self):
+        if self.avatar_image:
+            return self.avatar_image.url
+        return ''
+
     def save(self, *args, **kwargs):
         if not self.friend_id:
             self.friend_id = self.generate_unique_friend_id(self.user.username, exclude_user_id=self.user_id)
         super().save(*args, **kwargs)
+
+    def delete_avatar_image_file(self):
+        if self.avatar_image:
+            self.avatar_image.delete(save=False)
 
     @staticmethod
     def build_default_friend_id(username):
@@ -150,6 +161,7 @@ class UserChatProfile(models.Model):
         return {
             'friend_id': self.friend_id,
             'avatar_label': self.get_avatar_label(),
+            'avatar_url': self.avatar_url,
             'theme': self.color_theme,
             'style': self.bubble_style,
             'bubble_bg': theme['bubble_bg'],

@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ room_name }} - 聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322v">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
 </head>
 <body class="room-page{% if embed_mode %} embed-chat-page{% endif %}">
     {% if not embed_mode %}
@@ -115,7 +115,13 @@
             <div class="user-list" id="user-list">
                 <div class="user-item">
                     <div class="user-item-left">
-                        <div class="mini-avatar">{{ chat_profile.get_avatar_label }}</div>
+                        <div class="mini-avatar{% if chat_profile.avatar_image %} has-photo{% endif %}">
+                            {% if chat_profile.avatar_image %}
+                                <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像">
+                            {% else %}
+                                {{ chat_profile.get_avatar_label }}
+                            {% endif %}
+                        </div>
                         <span class="user-name-text">{{ user.username }}</span>
                     </div>
                     <span class="pill pill-owner">你</span>
@@ -335,11 +341,14 @@
                 html = `<span>${escapeHtml(data.message)}</span>`;
             } else {
                 const avatarLabel = escapeHtml(data.avatar_label || getFallbackAvatar(data.user));
+                const avatarMarkup = data.avatar_url
+                    ? `<img class="avatar-photo" src="${escapeHtml(data.avatar_url)}" alt="${escapeHtml(data.user)} 的头像">`
+                    : avatarLabel;
                 html = `<div class="msg-shell">`;
                 if (data.friend_id && data.user !== username) {
-                    html += `<button class="message-avatar avatar-action" type="button" data-friend-id="${escapeHtml(data.friend_id)}" data-friend-name="${escapeHtml(data.user)}">${avatarLabel}</button>`;
+                    html += `<button class="message-avatar avatar-action${data.avatar_url ? ' has-photo' : ''}" type="button" data-friend-id="${escapeHtml(data.friend_id)}" data-friend-name="${escapeHtml(data.user)}">${avatarMarkup}</button>`;
                 } else {
-                    html += `<div class="message-avatar">${avatarLabel}</div>`;
+                    html += `<div class="message-avatar${data.avatar_url ? ' has-photo' : ''}">${avatarMarkup}</div>`;
                 }
                 html += `<div class="message-stack">`;
                 html += `<div class="msg-head">`;
@@ -423,6 +432,7 @@
                 merged.set(member.username, {
                     username: member.username,
                     avatar_label: member.avatar_label,
+                    avatar_url: member.avatar_url,
                     friend_id: member.friend_id,
                     is_owner: !!member.is_owner,
                     is_self: !!member.is_self,
@@ -434,6 +444,7 @@
                 const previous = merged.get(name) || {
                     username: name,
                     avatar_label: getFallbackAvatar(name),
+                    avatar_url: '',
                     friend_id: '',
                     is_owner: false,
                     is_self: name === username,
@@ -442,6 +453,7 @@
                 merged.set(name, {
                     ...previous,
                     avatar_label: meta.avatar_label || previous.avatar_label,
+                    avatar_url: meta.avatar_url || previous.avatar_url,
                     friend_id: meta.friend_id || previous.friend_id,
                     is_owner: !!meta.is_owner || previous.is_owner,
                     is_self: previous.is_self || name === username,
@@ -478,6 +490,9 @@
                 const user = meta.username;
                 const isOwnerUser = !!meta.is_owner;
                 const avatarLabel = escapeHtml((meta.avatar_label || getFallbackAvatar(user)));
+                const avatarMarkup = meta.avatar_url
+                    ? `<img class="avatar-photo" src="${escapeHtml(meta.avatar_url)}" alt="${escapeHtml(user)} 的头像">`
+                    : avatarLabel;
                 const userItem = document.createElement('div');
                 userItem.className = 'user-item';
 
@@ -497,8 +512,8 @@
                 userItem.innerHTML = `
                     <div class="user-item-left">
                         ${meta.friend_id && user !== username
-                            ? `<button class="mini-avatar avatar-action" type="button" data-friend-id="${escapeHtml(meta.friend_id)}" data-friend-name="${escapeHtml(user)}">${avatarLabel}</button>`
-                            : `<div class="mini-avatar">${avatarLabel}</div>`}
+                            ? `<button class="mini-avatar avatar-action${meta.avatar_url ? ' has-photo' : ''}" type="button" data-friend-id="${escapeHtml(meta.friend_id)}" data-friend-name="${escapeHtml(user)}">${avatarMarkup}</button>`
+                            : `<div class="mini-avatar${meta.avatar_url ? ' has-photo' : ''}">${avatarMarkup}</div>`}
                         <span class="user-name-text">${escapeHtml(user)}</span>
                     </div>
                     ${actionHtml}

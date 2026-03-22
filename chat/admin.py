@@ -49,7 +49,7 @@ class UserLocationAdmin(admin.ModelAdmin):
 
 @admin.register(UserChatProfile)
 class UserChatProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'friend_id', 'avatar_label', 'color_theme', 'bubble_style', 'show_location')
+    list_display = ('user', 'friend_id', 'avatar_label', 'avatar_image', 'color_theme', 'bubble_style', 'show_location')
     list_filter = ('color_theme', 'bubble_style', 'show_location')
     search_fields = ('user__username', 'avatar_label', 'friend_id')
 

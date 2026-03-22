@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聊天室</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322x">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
 </head>
 <body class="lobby-page app-hub-page">
     <header class="topbar panel-card">
@@ -22,7 +22,13 @@
         </div>
         <div class="topbar-group">
             <div class="user-chip">
-                <div class="avatar">{{ user.chat_profile.get_avatar_label|default:user.username|slice:":2" }}</div>
+                <div class="avatar{% if user.chat_profile.avatar_image %} has-photo{% endif %}">
+                    {% if user.chat_profile.avatar_image %}
+                        <img class="avatar-photo" src="{{ user.chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像">
+                    {% else %}
+                        {{ user.chat_profile.get_avatar_label|default:user.username|slice:":2" }}
+                    {% endif %}
+                </div>
                 <div class="brand-title">
                     <strong>{{ user.username }}</strong>
                     <span>{% if user.is_superuser %}今天也来看看大家聊得怎么样{% else %}欢迎回来，挑个房间坐坐吧{% endif %}</span>

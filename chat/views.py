@@ -1,10 +1,12 @@
 import json
 import hashlib
+import io
 from urllib.parse import quote
 
 # chat/views.py
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from PIL import Image, ImageOps
 from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.contrib.auth import login, logout, update_session_auth_hash
@@ -19,6 +21,7 @@ from django.utils.safestring import mark_safe
 from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.core.files.base import ContentFile
 from django.contrib.sessions.models import Session
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -44,6 +47,8 @@ from .services.geoip_service import GeoIPService
 
 
 DEFAULT_ROOM_AVATARS = ['💬', '🐱', '🐶', '🐻', '🎮', '📚', '☕', '🌙', '🎵', '🍀']
+MAX_AVATAR_BYTES = 1024 * 1024
+MAX_AVATAR_DIMENSION = 720
 
 
 def build_room_group_name(room_name):
@@ -86,6 +91,43 @@ def get_or_create_chat_profile(user):
         profile.friend_id = UserChatProfile.generate_unique_friend_id(user.username, exclude_user_id=user.id)
         profile.save(update_fields=['friend_id'])
     return profile
+
+
+def compress_avatar_upload(uploaded_file, username):
+    try:
+        image = Image.open(uploaded_file)
+        image = ImageOps.exif_transpose(image)
+    except Exception:
+        raise ValueError('无法识别这张图片，请重新选择 JPG、PNG 或 WebP 图片')
+
+    if image.mode not in ('RGB', 'L'):
+        image = image.convert('RGB')
+    elif image.mode == 'L':
+        image = image.convert('RGB')
+
+    image.thumbnail((MAX_AVATAR_DIMENSION, MAX_AVATAR_DIMENSION), Image.Resampling.LANCZOS)
+    quality = 88
+    working_image = image
+
+    while True:
+        buffer = io.BytesIO()
+        working_image.save(buffer, format='JPEG', quality=quality, optimize=True, progressive=True)
+        content = buffer.getvalue()
+        if len(content) <= MAX_AVATAR_BYTES or quality <= 42:
+            if len(content) <= MAX_AVATAR_BYTES:
+                break
+
+            resized_width = max(160, int(working_image.width * 0.88))
+            resized_height = max(160, int(working_image.height * 0.88))
+            if resized_width == working_image.width and resized_height == working_image.height:
+                break
+            working_image = working_image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
+            quality = min(quality + 6, 88)
+            continue
+        quality -= 8
+
+    safe_name = ''.join(ch for ch in (username or 'user').lower() if ch.isalnum() or ch == '_') or 'user'
+    return ContentFile(content, name=f'avatars/{safe_name}_avatar.jpg')
 
 
 def are_friends(user, other_user):
@@ -243,6 +285,7 @@ def build_room_member_records(room, current_user):
             member_records.append({
                 'username': linked_user.username,
                 'avatar_label': profile.get_avatar_label(),
+                'avatar_url': profile.avatar_url,
                 'friend_id': profile.friend_id,
                 'is_owner': bool(room.created_by and room.created_by_id == linked_user.id),
                 'is_self': bool(current_user and current_user.id == linked_user.id),
@@ -265,6 +308,7 @@ def build_room_member_records(room, current_user):
             member_records.append({
                 'username': username,
                 'avatar_label': profile.get_avatar_label() if profile else username[:2],
+                'avatar_url': profile.avatar_url if profile else '',
                 'friend_id': profile.friend_id if profile else '',
                 'is_owner': bool(room.created_by and room.created_by.username == username),
                 'is_self': bool(current_user and current_user.username == username),
@@ -618,7 +662,29 @@ def profile_settings(request):
             chat_profile.color_theme = color_theme if color_theme in CHAT_COLOR_THEMES else DEFAULT_CHAT_THEME
             chat_profile.bubble_style = bubble_style if bubble_style in CHAT_BUBBLE_STYLES else DEFAULT_CHAT_STYLE
             chat_profile.show_location = request.POST.get('show_location') == 'on'
-            chat_profile.save(update_fields=['friend_id', 'avatar_label', 'bio', 'color_theme', 'bubble_style', 'show_location'])
+            remove_avatar_image = request.POST.get('remove_avatar_image') == 'on'
+            uploaded_avatar = request.FILES.get('avatar_image')
+            update_fields = ['friend_id', 'avatar_label', 'bio', 'color_theme', 'bubble_style', 'show_location']
+
+            if remove_avatar_image and chat_profile.avatar_image:
+                chat_profile.delete_avatar_image_file()
+                chat_profile.avatar_image = None
+                update_fields.append('avatar_image')
+
+            if uploaded_avatar:
+                try:
+                    optimized_avatar = compress_avatar_upload(uploaded_avatar, request.user.username)
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                    return redirect('profile_settings')
+
+                if chat_profile.avatar_image:
+                    chat_profile.delete_avatar_image_file()
+                chat_profile.avatar_image.save(optimized_avatar.name, optimized_avatar, save=False)
+                if 'avatar_image' not in update_fields:
+                    update_fields.append('avatar_image')
+
+            chat_profile.save(update_fields=update_fields)
             messages.success(request, '个人聊天设置已更新')
             return redirect('profile_settings')
 

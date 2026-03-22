@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>与 {{ other_user.username }} 的私聊</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322v">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
 </head>
 <body class="room-page direct-chat-page{% if embed_mode %} embed-chat-page{% endif %}">
     {% if not embed_mode %}
@@ -18,7 +18,13 @@
                 <span class="back-link-label">返回好友列表</span>
             </a>
             <div class="room-identity">
-                <div class="room-glyph room-avatar room-avatar-large">{{ other_profile.get_avatar_label }}</div>
+                <div class="room-glyph room-avatar room-avatar-large{% if other_profile.avatar_image %} has-photo{% endif %}">
+                    {% if other_profile.avatar_image %}
+                        <img class="avatar-photo" src="{{ other_profile.avatar_image.url }}" alt="{{ other_user.username }} 的头像">
+                    {% else %}
+                        {{ other_profile.get_avatar_label }}
+                    {% endif %}
+                </div>
                 <div class="room-title-block">
                     <strong>{{ other_user.username }}</strong>
                     <span>{{ other_profile.bio|default:"你们已经是好友，可以开始私聊了。" }}</span>
@@ -101,7 +107,13 @@
                 <span class="pill pill-muted">已是好友</span>
             </div>
             <div class="direct-friend-card">
-                <div class="mini-avatar direct-friend-avatar">{{ other_profile.get_avatar_label }}</div>
+                <div class="mini-avatar direct-friend-avatar{% if other_profile.avatar_image %} has-photo{% endif %}">
+                    {% if other_profile.avatar_image %}
+                        <img class="avatar-photo" src="{{ other_profile.avatar_image.url }}" alt="{{ other_user.username }} 的头像">
+                    {% else %}
+                        {{ other_profile.get_avatar_label }}
+                    {% endif %}
+                </div>
                 <div class="stack compact-stack">
                     <strong>{{ other_user.username }}</strong>
                     <span>好友 ID：{{ other_profile.friend_id }}</span>
@@ -125,7 +137,13 @@
                     {% for item in messages_list %}
                         <div class="message {% if item.sender == user %}mine{% else %}other{% endif %}">
                             <div class="msg-shell">
-                                <div class="message-avatar">{{ item.sender.chat_profile.get_avatar_label }}</div>
+                                <div class="message-avatar{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
+                                    {% if item.sender.chat_profile.avatar_image %}
+                                        <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.username }} 的头像">
+                                    {% else %}
+                                        {{ item.sender.chat_profile.get_avatar_label }}
+                                    {% endif %}
+                                </div>
                                 <div class="message-stack">
                                     <div class="msg-head">
                                         <div class="msg-user-wrap">
@@ -251,7 +269,7 @@
             const timeStr = timestamp.getHours().toString().padStart(2, '0') + ':' + timestamp.getMinutes().toString().padStart(2, '0');
             msgDiv.innerHTML = `
                 <div class="msg-shell">
-                    <div class="message-avatar">${escapeHtml(data.avatar_label)}</div>
+                    <div class="message-avatar${data.avatar_url ? ' has-photo' : ''}">${data.avatar_url ? `<img class="avatar-photo" src="${escapeHtml(data.avatar_url)}" alt="${escapeHtml(data.user)} 的头像">` : escapeHtml(data.avatar_label)}</div>
                     <div class="message-stack">
                         <div class="msg-head">
                             <div class="msg-user-wrap">

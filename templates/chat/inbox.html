@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>消息中心</title>
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322u">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322y">
 </head>
 <body class="lobby-page mobile-compact-shell">
     <header class="topbar panel-card">
@@ -54,7 +54,13 @@
                         {% for item in pending_requests %}
                             <div class="request-card">
                                 <div class="user-item-left">
-                                    <a href="{% url 'user_profile' item.sender.username %}" class="mini-avatar avatar-link">{{ item.sender.chat_profile.get_avatar_label|default:item.sender.username|slice:":2" }}</a>
+                                    <a href="{% url 'user_profile' item.sender.username %}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
+                                        {% if item.sender.chat_profile.avatar_image %}
+                                            <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.username }} 的头像">
+                                        {% else %}
+                                            {{ item.sender.chat_profile.get_avatar_label|default:item.sender.username|slice:":2" }}
+                                        {% endif %}
+                                    </a>
                                     <div>
                                         <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.username %}">{{ item.sender.username }}</a></strong>
                                         <div class="room-meta">
@@ -96,7 +102,13 @@
                         {% for item in friend_requests_history %}
                             <div class="request-card">
                                 <div class="user-item-left">
-                                    <a href="{% url 'user_profile' item.sender.username %}" class="mini-avatar avatar-link">{{ item.sender.chat_profile.get_avatar_label|default:item.sender.username|slice:":2" }}</a>
+                                    <a href="{% url 'user_profile' item.sender.username %}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
+                                        {% if item.sender.chat_profile.avatar_image %}
+                                            <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.username }} 的头像">
+                                        {% else %}
+                                            {{ item.sender.chat_profile.get_avatar_label|default:item.sender.username|slice:":2" }}
+                                        {% endif %}
+                                    </a>
                                     <div>
                                         <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.username %}">{{ item.sender.username }}</a></strong>
                                         <div class="room-meta">
