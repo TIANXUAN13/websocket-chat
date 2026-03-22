@@ -5,12 +5,9 @@ from pathlib import Path
 from django.conf import settings
 
 
-DEFAULT_DATASET_PATH = (
-    Path(getattr(settings, 'BASE_DIR', Path(__file__).resolve().parents[2]))
-    / 'chat'
-    / 'data'
-    / 'china_divisions.json'
-)
+def get_default_dataset_path():
+    base_dir = Path(getattr(settings, 'BASE_DIR', Path(__file__).resolve().parents[2]))
+    return base_dir / 'chat' / 'data' / 'china_divisions.json'
 
 
 class ChinaDivisionRepository:
@@ -21,10 +18,11 @@ class ChinaDivisionRepository:
     @classmethod
     @lru_cache(maxsize=1)
     def load_dataset(cls):
-        if not DEFAULT_DATASET_PATH.exists():
+        dataset_path = get_default_dataset_path()
+        if not dataset_path.exists():
             return None
 
-        with DEFAULT_DATASET_PATH.open('r', encoding='utf-8') as fp:
+        with dataset_path.open('r', encoding='utf-8') as fp:
             return json.load(fp)
 
     @classmethod
