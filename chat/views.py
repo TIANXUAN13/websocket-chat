@@ -373,6 +373,36 @@ def build_direct_threads(user):
     return sorted(threads, key=lambda item: item['last_message_at'], reverse=True)
 
 
+def build_direct_placeholder_thread(user, username):
+    if not user or not user.is_authenticated or not username:
+        return None
+
+    friendship = Friendship.objects.filter(
+        user=user,
+        friend__username=username,
+    ).select_related('friend', 'friend__chat_profile').first()
+    if not friendship:
+        return None
+
+    other_user = friendship.friend
+    profile = getattr(other_user, 'chat_profile', None)
+    embed_version = '20260322n'
+    return {
+        'type': 'direct',
+        'name': other_user.username,
+        'friend_id': getattr(profile, 'friend_id', ''),
+        'avatar_label': getattr(profile, 'get_avatar_label', lambda: other_user.username[:2].upper())(),
+        'avatar_url': getattr(profile, 'avatar_url', ''),
+        'url': reverse('direct_chat', args=[other_user.username]),
+        'embed_url': f"{reverse('direct_chat', args=[other_user.username])}?embed=1&v={embed_version}",
+        'inbox_url': f"{reverse('inbox')}?thread_type=direct&target={quote(other_user.username)}",
+        'delete_url': reverse('delete_direct_conversation', args=[other_user.username]),
+        'unread_count': 0,
+        'last_message_preview': '还没有私聊消息，发一句试试看。',
+        'last_message_at': None,
+    }
+
+
 def get_inbox_context(user):
     pending_requests = FriendRequest.objects.filter(
         recipient=user,
@@ -653,6 +683,11 @@ def index(request):
             ),
             None,
         )
+        if not active_thread and active_type == 'direct':
+            active_thread = build_direct_placeholder_thread(request.user, active_target)
+            if active_thread:
+                inbox_context['direct_threads'].append(active_thread)
+                inbox_context['conversation_threads'].append(active_thread)
 
     return render(request, 'chat/index.html', {
         'rooms': rooms,
