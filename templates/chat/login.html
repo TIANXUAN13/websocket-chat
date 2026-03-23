@@ -8,108 +8,211 @@
     {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
     <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
 </head>
-<body class="auth-page">
-    <main class="auth-layout">
-        <section class="auth-showcase auth-playground auth-playground-emoji" id="auth-playground">
-            <div class="showcase-topline">
-                <span class="section-label">闲聊室</span>
-                <span class="showcase-note">跟着鼠标看看它们</span>
+<body class="playful-login-page">
+    <main class="playful-login-shell">
+        <section class="playful-login-showcase">
+            <div class="playful-login-topline">
+                <div class="playful-login-brand">
+                    <div class="playful-login-brand-mark">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 12l10 5 10-5"/>
+                            <path d="M2 17l10 5 10-5"/>
+                        </svg>
+                    </div>
+                    <span>{{ site_title }}</span>
+                </div>
             </div>
 
-            <div class="emoji-stage">
-                <div class="emoji-pet" data-creature>
-                    <div class="emoji-paws" aria-hidden="true">🐾🐾</div>
-                    <div class="emoji-face" aria-hidden="true">🐶</div>
+            <div class="playful-characters" id="playful-characters">
+                <div class="playful-character playful-character-purple" data-character="purple">
+                    <div class="playful-eyes">
+                        <div class="playful-eye"><span class="playful-pupil"></span></div>
+                        <div class="playful-eye"><span class="playful-pupil"></span></div>
+                    </div>
                 </div>
-                <div class="emoji-pet" data-creature>
-                    <div class="emoji-paws" aria-hidden="true">🐾🐾</div>
-                    <div class="emoji-face" aria-hidden="true">🐱</div>
+                <div class="playful-character playful-character-black" data-character="black">
+                    <div class="playful-eyes">
+                        <div class="playful-eye"><span class="playful-pupil"></span></div>
+                        <div class="playful-eye"><span class="playful-pupil"></span></div>
+                    </div>
                 </div>
-                <div class="emoji-pet" data-creature>
-                    <div class="emoji-paws" aria-hidden="true">🐾🐾</div>
-                    <div class="emoji-face" aria-hidden="true">🐻‍❄️</div>
+                <div class="playful-character playful-character-orange" data-character="orange">
+                    <div class="playful-eyes">
+                        <div class="playful-pupil playful-pupil-solid"></div>
+                        <div class="playful-pupil playful-pupil-solid"></div>
+                    </div>
                 </div>
+                <div class="playful-character playful-character-yellow" data-character="yellow">
+                    <div class="playful-eyes">
+                        <div class="playful-pupil playful-pupil-solid"></div>
+                        <div class="playful-pupil playful-pupil-solid"></div>
+                    </div>
+                    <div class="playful-mouth"></div>
+                </div>
+            </div>
+
+            <div class="playful-login-copy">
+                <h1>欢迎回来</h1>
             </div>
         </section>
 
-        <section class="auth-panel">
-            <div class="brand-mark">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
+        <section class="playful-login-panel">
+            <div class="playful-login-panel-head">
+                <div class="playful-login-brand playful-login-brand-mobile">
+                    <div class="playful-login-brand-mark">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 12l10 5 10-5"/>
+                            <path d="M2 17l10 5 10-5"/>
+                        </svg>
+                    </div>
+                    <span>{{ site_title }}</span>
+                </div>
+                <h2>登录账号</h2>
+                <p>输入你已有的用户名和密码，马上回到聊天页。</p>
             </div>
-            <h2>欢迎回来</h2>
-            <p>登录后进入房间列表。</p>
 
             {% if form.errors %}
-                <div class="error-msg">用户名或密码错误，请重新输入。</div>
+                <div class="playful-login-alert">
+                    用户名或密码错误，请重新输入。
+                </div>
             {% endif %}
 
-            <form class="auth-form" method="post">
+            <form class="playful-login-form" method="post">
                 {% csrf_token %}
-                <div>
+                <div class="playful-field">
                     <label class="field-label" for="id_username">用户名</label>
-                    <input class="form-input" id="id_username" type="text" name="username" placeholder="请输入用户名" required autofocus>
+                    <input
+                        class="form-input playful-input"
+                        id="id_username"
+                        type="text"
+                        name="username"
+                        value="{{ form.username.value|default:'' }}"
+                        placeholder="请输入用户名"
+                        autocomplete="username"
+                        required
+                    >
                 </div>
-                <div>
+
+                <div class="playful-field">
                     <label class="field-label" for="id_password">密码</label>
-                    <input class="form-input" id="id_password" type="password" name="password" placeholder="请输入密码" required>
+                    <div class="playful-password-wrap">
+                        <input
+                            class="form-input playful-input"
+                            id="id_password"
+                            type="password"
+                            name="password"
+                            placeholder="请输入密码"
+                            autocomplete="current-password"
+                            required
+                        >
+                        <button class="playful-toggle" type="button" id="password-visibility-toggle" aria-label="显示或隐藏密码">
+                            <svg class="playful-toggle-icon playful-toggle-icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg class="playful-toggle-icon playful-toggle-icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden>
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                                <path d="M14.12 14.12A3 3 0 0 1 9.88 9.88"/>
+                                <path d="M1 1l22 22"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
-                <button class="btn btn-primary" type="submit">登录</button>
+
+                <div class="playful-login-row">
+                    <label class="playful-checkbox">
+                        <input type="checkbox" name="remember_me">
+                        <span>记住我</span>
+                    </label>
+                    <span class="playful-login-tip">登录后会进入你的聊天大厅</span>
+                </div>
+
+                <button class="btn btn-primary playful-login-submit" type="submit">登录</button>
             </form>
 
-            <div class="auth-footer">
-                还没有账号？<a href="{% url 'register' %}">立即注册</a>
+            <div class="playful-login-footer">
+                <p>还没有账号？</p>
+                <a href="{% url 'register' %}">立即注册</a>
             </div>
         </section>
     </main>
 
     <script>
-        const playground = document.getElementById('auth-playground');
-        const creatures = Array.from(document.querySelectorAll('[data-creature]'));
+        const loginShell = document.querySelector('.playful-login-shell');
+        const characters = Array.from(document.querySelectorAll('[data-character]'));
+        const usernameInput = document.getElementById('id_username');
         const passwordInput = document.getElementById('id_password');
+        const passwordVisibilityToggle = document.getElementById('password-visibility-toggle');
+        const eyeIcon = document.querySelector('.playful-toggle-icon-eye');
+        const eyeOffIcon = document.querySelector('.playful-toggle-icon-eye-off');
 
-        function updateCreatures(clientX, clientY) {
-            const bounds = playground.getBoundingClientRect();
-            const centerX = bounds.left + bounds.width / 2;
-            const centerY = bounds.top + bounds.height / 2;
-            const offsetX = (clientX - centerX) / bounds.width;
-            const offsetY = (clientY - centerY) / bounds.height;
-
-            creatures.forEach((creature, index) => {
-                const config = [
-                    { rotate: 10, shiftX: 18, shiftY: 10, floatY: 8 },
-                    { rotate: 14, shiftX: 24, shiftY: 12, floatY: 10 },
-                    { rotate: 9, shiftX: 16, shiftY: 8, floatY: 7 }
-                ][index];
-
-                creature.style.setProperty('--pet-rotate', `${offsetX * config.rotate}deg`);
-                creature.style.setProperty('--pet-x', `${offsetX * config.shiftX}px`);
-                creature.style.setProperty('--pet-y', `${offsetY * config.shiftY}px`);
-                creature.style.setProperty('--pet-lift', `${Math.abs(offsetX) * config.floatY}px`);
+        function movePupils(clientX, clientY) {
+            characters.forEach((character) => {
+                const rect = character.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 3;
+                const offsetX = Math.max(-8, Math.min(8, (clientX - centerX) / 20));
+                const offsetY = Math.max(-6, Math.min(6, (clientY - centerY) / 28));
+                character.style.setProperty('--look-x', `${offsetX}px`);
+                character.style.setProperty('--look-y', `${offsetY}px`);
+                character.style.setProperty('--body-skew', `${Math.max(-8, Math.min(8, (clientX - centerX) / 80))}deg`);
             });
         }
 
-        playground.addEventListener('mousemove', (event) => {
-            updateCreatures(event.clientX, event.clientY);
+        window.addEventListener('mousemove', (event) => {
+            movePupils(event.clientX, event.clientY);
         });
 
-        playground.addEventListener('mouseleave', () => {
-            creatures.forEach((creature) => {
-                creature.style.setProperty('--pet-rotate', '0deg');
-                creature.style.setProperty('--pet-x', '0px');
-                creature.style.setProperty('--pet-y', '0px');
-                creature.style.setProperty('--pet-lift', '0px');
+        function setTypingMode(active) {
+            if (!loginShell) return;
+            loginShell.classList.toggle('is-typing', active);
+        }
+
+        function updatePeekMode() {
+            if (!loginShell || !passwordInput) return;
+            const isPeeking = passwordInput.value.trim().length > 0 && passwordInput.type === 'text';
+            loginShell.classList.toggle('is-peeking', isPeeking);
+        }
+
+        if (usernameInput) {
+            usernameInput.addEventListener('focus', () => setTypingMode(true));
+            usernameInput.addEventListener('blur', () => setTypingMode(false));
+            usernameInput.addEventListener('input', () => setTypingMode(true));
+        }
+
+        if (passwordInput) {
+            passwordInput.addEventListener('input', updatePeekMode);
+            passwordInput.addEventListener('focus', updatePeekMode);
+            passwordInput.addEventListener('blur', updatePeekMode);
+        }
+
+        if (passwordVisibilityToggle && passwordInput) {
+            passwordVisibilityToggle.addEventListener('click', () => {
+                const nextType = passwordInput.type === 'password' ? 'text' : 'password';
+                passwordInput.type = nextType;
+                if (eyeIcon) {
+                    eyeIcon.hidden = nextType === 'text';
+                }
+                if (eyeOffIcon) {
+                    eyeOffIcon.hidden = nextType !== 'text';
+                }
+                updatePeekMode();
             });
-        });
+        }
 
-        passwordInput.addEventListener('focus', () => {
-            playground.classList.add('peek-mode');
-        });
-
-        passwordInput.addEventListener('blur', () => {
-            playground.classList.remove('peek-mode');
-        });
+        let blinkToggle = false;
+        window.setInterval(() => {
+            blinkToggle = !blinkToggle;
+            characters.forEach((character, index) => {
+                if ((index + Number(blinkToggle)) % 2 === 0) {
+                    character.classList.add('is-blinking');
+                    window.setTimeout(() => character.classList.remove('is-blinking'), 160);
+                }
+            });
+        }, 3200);
     </script>
 </body>
 </html>

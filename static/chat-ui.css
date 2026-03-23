@@ -1229,6 +1229,442 @@ select.form-input {
     text-decoration: none;
 }
 
+.playful-login-page {
+    min-height: 100vh;
+    margin: 0;
+    padding: 24px;
+    background:
+        radial-gradient(circle at top left, rgba(140, 103, 255, 0.12), transparent 26%),
+        radial-gradient(circle at bottom right, rgba(255, 180, 122, 0.14), transparent 28%),
+        linear-gradient(180deg, #f7f6fb 0%, #fff8f2 100%);
+}
+
+.playful-login-shell {
+    width: min(1280px, 100%);
+    min-height: calc(100vh - 48px);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    border-radius: 36px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 30px 80px rgba(58, 37, 94, 0.16);
+    backdrop-filter: blur(24px);
+}
+
+.playful-login-showcase {
+    position: relative;
+    overflow: hidden;
+    padding: 34px 38px 34px;
+    background: linear-gradient(135deg, #6c3ff5 0%, #5a34d1 45%, #4e2bb9 100%);
+    color: #fff;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 20px;
+}
+
+.playful-login-showcase::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+    opacity: 0.65;
+}
+
+.playful-login-showcase::after {
+    content: "";
+    position: absolute;
+    inset: auto auto 0 0;
+    width: 360px;
+    height: 360px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    filter: blur(18px);
+    transform: translate(-12%, 16%);
+}
+
+.playful-login-topline,
+.playful-login-copy,
+.playful-characters {
+    position: relative;
+    z-index: 1;
+}
+
+.playful-login-topline {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.playful-login-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.playful-login-brand-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.16);
+}
+
+.playful-login-brand-mark svg {
+    width: 18px;
+    height: 18px;
+}
+
+.playful-characters {
+    position: relative;
+    min-height: 480px;
+}
+
+.playful-character {
+    --look-x: 0px;
+    --look-y: 0px;
+    --body-skew: 0deg;
+    position: absolute;
+    bottom: 0;
+    transform: skewX(var(--body-skew));
+    transform-origin: bottom center;
+    transition: transform 220ms ease, height 220ms ease, left 220ms ease;
+}
+
+.playful-character-purple {
+    left: 82px;
+    width: 188px;
+    height: 388px;
+    border-radius: 12px 12px 0 0;
+    background: #6c3ff5;
+    z-index: 1;
+}
+
+.playful-character-black {
+    left: 252px;
+    width: 128px;
+    height: 304px;
+    border-radius: 10px 10px 0 0;
+    background: #242424;
+    z-index: 2;
+}
+
+.playful-character-orange {
+    left: 6px;
+    width: 248px;
+    height: 196px;
+    border-radius: 128px 128px 0 0;
+    background: #ff9b6b;
+    z-index: 3;
+}
+
+.playful-character-yellow {
+    left: 324px;
+    width: 144px;
+    height: 228px;
+    border-radius: 72px 72px 0 0;
+    background: #e8d754;
+    z-index: 4;
+}
+
+.playful-eyes {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.playful-character-purple .playful-eyes {
+    left: 46px;
+    top: 42px;
+}
+
+.playful-character-black .playful-eyes {
+    left: 28px;
+    top: 34px;
+    gap: 14px;
+}
+
+.playful-character-orange .playful-eyes {
+    left: 88px;
+    top: 92px;
+    gap: 28px;
+}
+
+.playful-character-yellow .playful-eyes {
+    left: 50px;
+    top: 44px;
+    gap: 22px;
+}
+
+.playful-eye {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    transition: height 120ms ease;
+}
+
+.playful-character-black .playful-eye {
+    width: 16px;
+    height: 16px;
+}
+
+.playful-character.is-blinking .playful-eye {
+    height: 2px;
+}
+
+.playful-pupil {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #242424;
+    transform: translate(var(--look-x), var(--look-y));
+    transition: transform 90ms ease-out;
+}
+
+.playful-pupil-solid {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #242424;
+    transform: translate(var(--look-x), var(--look-y));
+    transition: transform 90ms ease-out;
+}
+
+.playful-mouth {
+    position: absolute;
+    left: 40px;
+    top: 94px;
+    width: 64px;
+    height: 4px;
+    border-radius: 999px;
+    background: #242424;
+}
+
+.playful-login-shell.is-typing .playful-character-purple {
+    left: 118px;
+    height: 424px;
+}
+
+.playful-login-shell.is-typing .playful-character-black {
+    left: 272px;
+}
+
+.playful-login-shell.is-peeking .playful-character-purple {
+    transform: skewX(0deg);
+}
+
+.playful-login-shell.is-peeking .playful-character-black,
+.playful-login-shell.is-peeking .playful-character-orange,
+.playful-login-shell.is-peeking .playful-character-yellow {
+    transform: skewX(0deg);
+}
+
+.playful-login-shell.is-peeking .playful-character [class*="playful-pupil"] {
+    --look-x: -5px;
+    --look-y: -4px;
+}
+
+.playful-login-copy h1 {
+    margin: 0 0 12px;
+    font-size: clamp(2.5rem, 5vw, 4rem);
+    line-height: 0.96;
+    letter-spacing: -0.05em;
+}
+
+.playful-login-panel {
+    padding: 52px 44px;
+    background: rgba(255,255,255,0.94);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.playful-login-brand-mobile {
+    display: none;
+    color: var(--text-strong);
+    margin-bottom: 28px;
+}
+
+.playful-login-panel-head h2 {
+    margin: 0;
+    color: var(--text-strong);
+    font-size: 2.2rem;
+    letter-spacing: -0.04em;
+}
+
+.playful-login-panel-head p {
+    margin: 10px 0 0;
+    color: var(--text-muted);
+    line-height: 1.7;
+}
+
+.playful-login-alert {
+    margin-top: 22px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(194, 70, 53, 0.1);
+    border: 1px solid rgba(194, 70, 53, 0.16);
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.playful-login-form {
+    margin-top: 28px;
+    display: grid;
+    gap: 18px;
+}
+
+.playful-field {
+    display: grid;
+    gap: 8px;
+}
+
+.playful-input {
+    height: 52px;
+    border-radius: 16px;
+}
+
+.playful-password-wrap {
+    position: relative;
+}
+
+.playful-password-wrap .playful-input {
+    padding-right: 54px;
+}
+
+.playful-toggle {
+    position: absolute;
+    top: 50%;
+    right: 14px;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+}
+
+.playful-toggle-icon {
+    width: 18px;
+    height: 18px;
+}
+
+.playful-login-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.playful-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-body);
+    font-size: 14px;
+}
+
+.playful-login-tip {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.playful-login-submit {
+    min-height: 54px;
+    font-size: 15px;
+}
+
+.playful-login-footer {
+    margin-top: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.playful-login-footer p {
+    margin: 0;
+}
+
+.playful-login-footer a {
+    color: var(--text-strong);
+    font-weight: 800;
+    text-decoration: none;
+}
+
+@media (max-width: 980px) {
+    .playful-login-page {
+        padding: 14px;
+    }
+
+    .playful-login-shell {
+        min-height: auto;
+        grid-template-columns: 1fr;
+    }
+
+    .playful-login-showcase {
+        min-height: 420px;
+        padding: 24px 22px;
+    }
+
+    .playful-characters {
+        min-height: 300px;
+        transform: scale(0.78);
+        transform-origin: center bottom;
+    }
+
+    .playful-login-copy h1 {
+        font-size: 2.4rem;
+    }
+
+    .playful-login-panel {
+        padding: 28px 22px 30px;
+    }
+
+    .playful-login-brand-mobile {
+        display: inline-flex;
+    }
+}
+
+@media (max-width: 640px) {
+    .playful-login-showcase {
+        display: none;
+    }
+
+    .playful-login-panel {
+        padding: 24px 18px 26px;
+    }
+
+    .playful-login-panel-head h2 {
+        font-size: 1.9rem;
+    }
+
+    .playful-login-row {
+        align-items: flex-start;
+    }
+}
+
 .hint-card {
     margin-top: 20px;
     padding: 16px 18px;
