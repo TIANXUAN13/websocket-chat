@@ -103,7 +103,7 @@
                     <input class="form-input conversation-search-input" id="conversation-search" type="search" placeholder="搜索聊天..." autocomplete="off">
                 </div>
             </div>
-            <div class="room-list conversation-list">
+            <div class="room-list conversation-list" id="conversation-thread-list">
                 {% if conversation_threads %}
                     {% for item in conversation_threads %}
                         <div class="thread-swipe-shell{% if item.delete_url %} can-delete{% endif %}"{% if item.delete_url %} data-can-delete="true"{% endif %}>
@@ -142,14 +142,14 @@
                             {% if item.delete_url %}
                                 <form class="thread-swipe-action" method="post" action="{{ item.delete_url }}">
                                     {% csrf_token %}
-                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <input type="hidden" name="next" value="{% url 'chat_index' %}">
                                     <button class="thread-delete-btn" type="submit" onclick="return confirm('确定从你的会话列表移除这个{% if item.type == "room" %}群聊{% else %}私聊{% endif %}吗？');">删除</button>
                                 </form>
                             {% endif %}
                         </div>
                     {% endfor %}
                 {% else %}
-                    <div class="quick-action-card">
+                    <div class="quick-action-card" id="conversation-empty-card">
                         <strong>还没有会话</strong>
                         <p>进一个群聊发言，或者和好友开始聊天后，这里就会出现在消息中心。</p>
                     </div>
@@ -429,7 +429,9 @@
         });
 
         let threadItems = Array.from(document.querySelectorAll('.unified-thread-item'));
-        const threadSwipeShells = Array.from(document.querySelectorAll('.thread-swipe-shell[data-can-delete="true"]'));
+        let threadSwipeShells = Array.from(document.querySelectorAll('.thread-swipe-shell[data-can-delete="true"]'));
+        const conversationThreadList = document.getElementById('conversation-thread-list');
+        const conversationEmptyCard = document.getElementById('conversation-empty-card');
         const conversationFrame = document.getElementById('conversation-frame');
         const emptyChatShell = document.getElementById('empty-chat-shell');
         const mobileThreadMedia = window.matchMedia('(max-width: 720px)');
@@ -439,6 +441,29 @@
 
         function isMobileThreadLayout() {
             return mobileThreadMedia.matches;
+        }
+
+        function getCookie(name) {
+            const cookieValue = document.cookie
+                .split(';')
+                .map((item) => item.trim())
+                .find((item) => item.startsWith(`${name}=`));
+            return cookieValue ? decodeURIComponent(cookieValue.slice(name.length + 1)) : '';
+        }
+
+        function getThreadTypeLabel(threadType) {
+            return threadType === 'room' ? '群聊' : '私聊';
+        }
+
+        function isThreadTargetActive(threadType, threadName) {
+            const currentUrl = new URL(window.location.href);
+            return currentUrl.searchParams.get('thread_type') === threadType
+                && currentUrl.searchParams.get('target') === threadName;
+        }
+
+        function updateConversationEmptyState() {
+            if (!conversationEmptyCard) return;
+            conversationEmptyCard.hidden = threadItems.length > 0;
         }
 
         function openThreadPage(item) {
@@ -457,6 +482,13 @@
                 nextUrl.searchParams.delete('target');
             }
             window.history.replaceState({}, '', nextUrl);
+        }
+
+        function getConversationListReturnUrl() {
+            const nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.delete('thread_type');
+            nextUrl.searchParams.delete('target');
+            return `${nextUrl.pathname}${nextUrl.search}`;
         }
 
         function showEmptyState() {
@@ -492,7 +524,7 @@
             }
         }
 
-        threadItems.forEach((item) => {
+        function bindThreadItem(item) {
             item.addEventListener('click', () => {
                 const swipeShell = item.closest('.thread-swipe-shell');
                 if (swipeShell && swipeShell.classList.contains('is-swiped')) {
@@ -511,7 +543,9 @@
                 }
                 showThread(item);
             });
-        });
+        }
+
+        threadItems.forEach((item) => bindThreadItem(item));
 
         if (isMobileThreadLayout()) {
             const initiallyActiveThread = document.querySelector('.unified-thread-item.active');
@@ -565,9 +599,19 @@
             });
         }
 
-        threadSwipeShells.forEach((shell) => {
+        function bindSwipeShell(shell) {
             const content = shell.querySelector('.unified-thread-item');
             if (!content) return;
+            const actionForm = shell.querySelector('.thread-swipe-action');
+            if (actionForm && !actionForm.dataset.nextBound) {
+                actionForm.addEventListener('submit', () => {
+                    const nextInput = actionForm.querySelector('input[name="next"]');
+                    if (nextInput) {
+                        nextInput.value = getConversationListReturnUrl();
+                    }
+                });
+                actionForm.dataset.nextBound = 'true';
+            }
 
             let startX = 0;
             let deltaX = 0;
@@ -632,7 +676,121 @@
                 event.stopPropagation();
                 suppressClick = false;
             }, true);
-        });
+        }
+
+        threadSwipeShells.forEach((shell) => bindSwipeShell(shell));
+
+        function createThreadListItem(payload) {
+            if (!conversationThreadList || !payload || !payload.type || !payload.name) return null;
+
+            const shell = document.createElement('div');
+            shell.className = payload.delete_url ? 'thread-swipe-shell can-delete' : 'thread-swipe-shell';
+            if (payload.delete_url) {
+                shell.dataset.canDelete = 'true';
+            }
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'thread-list-item unified-thread-item';
+            if (isThreadTargetActive(payload.type, payload.name)) {
+                button.classList.add('active');
+            }
+            button.dataset.threadUrl = payload.embed_url || '';
+            button.dataset.threadFullUrl = payload.url || '';
+            button.dataset.threadName = payload.name || '';
+            button.dataset.threadType = payload.type || '';
+            button.dataset.threadTarget = payload.name || '';
+            button.dataset.threadPreview = payload.preview || '';
+            button.dataset.threadTimestamp = payload.timestamp || '';
+
+            const avatar = document.createElement('div');
+            avatar.className = 'thread-avatar';
+            if (payload.avatar_url) {
+                avatar.classList.add('has-photo');
+                const image = document.createElement('img');
+                image.className = 'avatar-photo';
+                image.src = payload.avatar_url;
+                image.alt = `${payload.name} 的头像`;
+                avatar.appendChild(image);
+            } else {
+                avatar.textContent = payload.avatar_label || String(payload.name).slice(0, 2);
+            }
+
+            const main = document.createElement('div');
+            main.className = 'thread-main';
+
+            const topLine = document.createElement('div');
+            topLine.className = 'thread-topline';
+            const title = document.createElement('strong');
+            title.className = 'room-title';
+            title.dataset.highlightTarget = '';
+            title.textContent = payload.name || '';
+            topLine.appendChild(title);
+            if (Number(payload.unread_count || 0) > 0) {
+                const countNode = document.createElement('span');
+                countNode.className = 'thread-count';
+                countNode.textContent = String(payload.unread_count);
+                topLine.appendChild(countNode);
+            }
+
+            const meta = document.createElement('div');
+            meta.className = 'room-meta';
+            const typeNode = document.createElement('span');
+            typeNode.textContent = getThreadTypeLabel(payload.type);
+            const timeNode = document.createElement('span');
+            timeNode.textContent = payload.timestamp || '';
+            meta.append(typeNode, timeNode);
+
+            const preview = document.createElement('div');
+            preview.className = 'thread-preview';
+            preview.dataset.highlightTarget = '';
+            preview.textContent = payload.preview || '';
+
+            main.append(topLine, meta, preview);
+            button.append(avatar, main);
+            shell.appendChild(button);
+
+            if (payload.delete_url) {
+                const form = document.createElement('form');
+                form.className = 'thread-swipe-action';
+                form.method = 'post';
+                form.action = payload.delete_url;
+
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrfmiddlewaretoken';
+                csrfInput.value = getCookie('csrftoken');
+
+                const nextInput = document.createElement('input');
+                nextInput.type = 'hidden';
+                nextInput.name = 'next';
+                nextInput.value = getConversationListReturnUrl();
+
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'thread-delete-btn';
+                deleteButton.type = 'submit';
+                deleteButton.textContent = '删除';
+                deleteButton.onclick = () => window.confirm(`确定从你的会话列表移除这个${payload.type === 'room' ? '群聊' : '私聊'}吗？`);
+
+                form.append(csrfInput, nextInput, deleteButton);
+                shell.appendChild(form);
+            }
+
+            if (conversationEmptyCard && conversationEmptyCard.parentElement === conversationThreadList) {
+                conversationEmptyCard.hidden = true;
+            }
+            conversationThreadList.prepend(shell);
+            threadItems.unshift(button);
+            bindThreadItem(button);
+
+            if (shell.dataset.canDelete === 'true') {
+                threadSwipeShells.unshift(shell);
+                bindSwipeShell(shell);
+            }
+
+            updateConversationEmptyState();
+            return button;
+        }
 
         function filterConversationThreads(keyword) {
             const normalizedKeyword = (keyword || '').trim().toLowerCase();
@@ -738,7 +896,21 @@
                 (item.dataset.threadType || '') === (payload.threadType || '')
                 && (item.dataset.threadName || '') === (payload.threadName || '')
             ));
-            if (!matchedItem) return;
+            if (!matchedItem) {
+                createThreadListItem({
+                    type: payload.threadType || '',
+                    name: payload.threadName || '',
+                    url: payload.url || '',
+                    embed_url: payload.embedUrl || '',
+                    delete_url: payload.deleteUrl || '',
+                    avatar_label: payload.avatarLabel || '',
+                    avatar_url: payload.avatarUrl || '',
+                    unread_count: Number(payload.unreadCount || 0),
+                    preview: payload.preview || '',
+                    timestamp: payload.timestamp || '',
+                });
+                return;
+            }
 
             if (typeof payload.preview === 'string') {
                 matchedItem.dataset.threadPreview = payload.preview;
@@ -746,6 +918,13 @@
                 if (previewNode) {
                     previewNode.textContent = payload.preview;
                 }
+            }
+
+            if (typeof payload.url === 'string' && payload.url) {
+                matchedItem.dataset.threadFullUrl = payload.url;
+            }
+            if (typeof payload.embedUrl === 'string' && payload.embedUrl) {
+                matchedItem.dataset.threadUrl = payload.embedUrl;
             }
 
             if (typeof payload.timestamp === 'string' && payload.timestamp) {
@@ -782,8 +961,15 @@
             if (!matchedItem) return;
 
             const wasActive = matchedItem.classList.contains('active');
-            matchedItem.remove();
+            const matchedShell = matchedItem.closest('.thread-swipe-shell');
+            if (matchedShell) {
+                matchedShell.remove();
+                threadSwipeShells = threadSwipeShells.filter((shell) => shell !== matchedShell);
+            } else {
+                matchedItem.remove();
+            }
             threadItems = threadItems.filter((item) => item !== matchedItem);
+            updateConversationEmptyState();
 
             if (wasActive) {
                 showEmptyState();
@@ -927,6 +1113,11 @@
                     updateThreadItemStatus({
                         threadType: item.type || '',
                         threadName: item.name || '',
+                        url: item.url || '',
+                        embedUrl: item.embed_url || '',
+                        deleteUrl: item.delete_url || '',
+                        avatarLabel: item.avatar_label || '',
+                        avatarUrl: item.avatar_url || '',
                         preview: item.preview || '',
                         timestamp: item.timestamp || '',
                         unreadCount: Number(item.unread_count || 0),
@@ -1005,6 +1196,13 @@
         connectInboxSummarySocket();
         syncThreadListSummary();
         scheduleThreadListSummarySync();
+        updateConversationEmptyState();
+
+        if (conversationFrame) {
+            conversationFrame.addEventListener('load', () => {
+                requestThreadListSummarySync(120);
+            });
+        }
     </script>
 </body>
 </html>

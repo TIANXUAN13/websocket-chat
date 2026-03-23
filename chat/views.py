@@ -353,13 +353,20 @@ def build_direct_threads(user):
         state, _ = DirectConversationState.objects.get_or_create(conversation=conversation, user=user)
         visible_messages = get_visible_direct_messages(conversation, state)
         latest_message = visible_messages.order_by('-created_at').first()
-        if not latest_message:
+        if not latest_message and state.deleted_at:
             continue
 
         other_user = conversation.other_user(user)
         unread_qs = visible_messages.exclude(sender=user)
         if state.last_read_at:
             unread_qs = unread_qs.filter(created_at__gt=state.last_read_at)
+
+        if latest_message:
+            last_message_preview = get_thread_preview_text(latest_message.content)
+            last_message_at = latest_message.created_at
+        else:
+            last_message_preview = '还没有私聊消息，发一句试试看。'
+            last_message_at = conversation.created_at
 
         threads.append({
             'type': 'direct',
@@ -372,11 +379,35 @@ def build_direct_threads(user):
             'inbox_url': f"{reverse('inbox')}?thread_type=direct&target={quote(other_user.username)}",
             'delete_url': reverse('delete_direct_conversation', args=[other_user.username]),
             'unread_count': unread_qs.count(),
-            'last_message_preview': get_thread_preview_text(latest_message.content),
-            'last_message_at': latest_message.created_at,
+            'last_message_preview': last_message_preview,
+            'last_message_at': last_message_at,
         })
 
     return sorted(threads, key=lambda item: item['last_message_at'], reverse=True)
+
+
+def build_room_placeholder_thread(user, room_name):
+    if not user or not user.is_authenticated or not room_name:
+        return None
+
+    room = get_accessible_rooms_queryset(user).filter(name=room_name).first()
+    if not room:
+        return None
+
+    embed_version = '20260322n'
+    return {
+        'type': 'room',
+        'name': room.name,
+        'avatar_label': room.avatar,
+        'avatar_url': room.avatar_url,
+        'url': reverse('chat_room', args=[room.name]),
+        'embed_url': f"{reverse('chat_room', args=[room.name])}?embed=1&v={embed_version}",
+        'inbox_url': f"{reverse('inbox')}?thread_type=room&target={quote(room.name)}",
+        'delete_url': reverse('delete_room_conversation', args=[room.name]),
+        'unread_count': 0,
+        'last_message_preview': room.description or '新群聊已创建，来发第一条消息吧',
+        'last_message_at': room.created_at,
+    }
 
 
 def build_direct_placeholder_thread(user, username):
@@ -689,11 +720,11 @@ def index(request):
             ),
             None,
         )
-        if not active_thread and active_type == 'direct':
-            active_thread = build_direct_placeholder_thread(request.user, active_target)
-            if active_thread:
-                inbox_context['direct_threads'].append(active_thread)
-                inbox_context['conversation_threads'].append(active_thread)
+        if not active_thread:
+            if active_type == 'direct':
+                active_thread = build_direct_placeholder_thread(request.user, active_target)
+            elif active_type == 'room':
+                active_thread = build_room_placeholder_thread(request.user, active_target)
 
     return render(request, 'chat/index.html', {
         'rooms': rooms,
@@ -1091,7 +1122,10 @@ def inbox_summary(request):
                 'type': item['type'],
                 'name': item['name'],
                 'url': item['url'],
+                'embed_url': item['embed_url'],
                 'delete_url': item['delete_url'],
+                'avatar_label': item['avatar_label'],
+                'avatar_url': item['avatar_url'],
                 'unread_count': item['unread_count'],
                 'preview': item['last_message_preview'],
                 'timestamp': timezone.localtime(item['last_message_at']).strftime('%m-%d %H:%M') if item['last_message_at'] else '',
@@ -1103,8 +1137,11 @@ def inbox_summary(request):
                 'type': item['type'],
                 'name': item['name'],
                 'url': item['url'],
+                'embed_url': item['embed_url'],
                 'delete_url': item['delete_url'],
                 'friend_id': item['friend_id'],
+                'avatar_label': item['avatar_label'],
+                'avatar_url': item['avatar_url'],
                 'unread_count': item['unread_count'],
                 'preview': item['last_message_preview'],
                 'timestamp': timezone.localtime(item['last_message_at']).strftime('%m-%d %H:%M') if item['last_message_at'] else '',
