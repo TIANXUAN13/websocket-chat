@@ -241,7 +241,12 @@
         let directHeartbeatTimeoutTimer = null;
         let isDirectPageUnloading = false;
         let directReconnectNoticeShown = false;
+        let preciseLocationRetryTimer = null;
+        let preciseLocationAttemptCount = 0;
+        let preciseLocationSynced = false;
         const directMessageSignatures = new Set();
+        const PRECISE_LOCATION_SYNC_KEY = 'codex_precise_location_synced_at';
+        const PRECISE_LOCATION_SYNC_TTL = 10 * 60 * 1000;
 
         function toggleDirectSettings(forceState) {
             const shouldOpen = typeof forceState === 'boolean'
@@ -370,6 +375,79 @@
         function updateDirectStatus(connected) {
             directStatusText.textContent = connected ? '实时已连接' : '连接已断开';
             directStatusText.classList.toggle('pill-muted', true);
+        }
+
+        function markPreciseLocationSynced() {
+            preciseLocationSynced = true;
+            try {
+                window.sessionStorage.setItem(PRECISE_LOCATION_SYNC_KEY, String(Date.now()));
+            } catch (error) {
+                console.warn('写入位置同步缓存失败:', error);
+            }
+        }
+
+        function hasRecentPreciseLocationSync() {
+            try {
+                const lastSyncedAt = Number(window.sessionStorage.getItem(PRECISE_LOCATION_SYNC_KEY) || '0');
+                return lastSyncedAt > 0 && (Date.now() - lastSyncedAt) < PRECISE_LOCATION_SYNC_TTL;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function schedulePreciseLocationRetry() {
+            if (preciseLocationSynced || preciseLocationAttemptCount >= 3 || preciseLocationRetryTimer) {
+                return;
+            }
+            const delay = preciseLocationAttemptCount === 1 ? 2000 : 5000;
+            preciseLocationRetryTimer = window.setTimeout(() => {
+                preciseLocationRetryTimer = null;
+                requestPreciseLocation(true);
+            }, delay);
+        }
+
+        async function syncPreciseLocation(position) {
+            const response = await fetch('{% url "update_precise_location" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                }),
+            });
+            if (!response.ok) {
+                throw new Error(`location_sync_failed_${response.status}`);
+            }
+            const payload = await response.json();
+            if (!payload.ok) {
+                throw new Error(payload.error || 'location_sync_failed');
+            }
+            markPreciseLocationSynced();
+        }
+
+        function requestPreciseLocation(forceRetry) {
+            if (preciseLocationSynced || (!forceRetry && hasRecentPreciseLocationSync()) || !navigator.geolocation) return;
+            preciseLocationAttemptCount += 1;
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    syncPreciseLocation(position).catch((error) => {
+                        console.warn('同步精确位置失败:', error);
+                        schedulePreciseLocationRetry();
+                    });
+                },
+                () => {
+                    schedulePreciseLocationRetry();
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 120000,
+                }
+            );
         }
 
         function applyAppearance(element, appearance) {
@@ -655,9 +733,11 @@
             isDirectPageUnloading = true;
             clearDirectHeartbeatTimers();
             window.clearTimeout(directReconnectTimer);
+            window.clearTimeout(preciseLocationRetryTimer);
         });
 
         connectDirectSocket();
+        requestPreciseLocation();
         scrollDirectMessagesToBottom();
         markDirectAsRead();
         const latestDirectMessageElement = Array.from(directMessageList.querySelectorAll('.message')).pop();

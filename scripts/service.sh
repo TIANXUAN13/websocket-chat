@@ -20,6 +20,12 @@ MIGRATE_ON_START="${MIGRATE_ON_START:-1}"
 INSTALL_DEPS_ON_START="${INSTALL_DEPS_ON_START:-1}"
 PYPI_MIRROR_URL="${PYPI_MIRROR_URL:-https://mirrors.aliyun.com/pypi/simple/}"
 PYPI_TRUSTED_HOST="${PYPI_TRUSTED_HOST:-mirrors.aliyun.com}"
+GEOCODE_PROVIDER="${GEOCODE_PROVIDER:-auto}"
+GEOCODE_TIMEOUT="${GEOCODE_TIMEOUT:-8}"
+AMAP_WEB_API_KEY="${AMAP_WEB_API_KEY:-}"
+REVERSE_GEOCODE_URL="${REVERSE_GEOCODE_URL:-https://nominatim.openstreetmap.org/reverse}"
+BIGDATA_REVERSE_URL="${BIGDATA_REVERSE_URL:-https://api.bigdatacloud.net/data/reverse-geocode-client}"
+GEOCODE_USER_AGENT="${GEOCODE_USER_AGENT:-websocket-chat/1.0 (location reverse geocoding)}"
 REQUIREMENTS_STAMP="$PROJECT_DIR/$VENV_PATH/.requirements.installed"
 SELF_SCRIPT="$PROJECT_DIR/scripts/service.sh"
 
@@ -148,6 +154,12 @@ MIGRATE_ON_START=$MIGRATE_ON_START
 INSTALL_DEPS_ON_START=$INSTALL_DEPS_ON_START
 PYPI_MIRROR_URL=$PYPI_MIRROR_URL
 PYPI_TRUSTED_HOST=$PYPI_TRUSTED_HOST
+GEOCODE_PROVIDER=$GEOCODE_PROVIDER
+GEOCODE_TIMEOUT=$GEOCODE_TIMEOUT
+AMAP_WEB_API_KEY=$AMAP_WEB_API_KEY
+REVERSE_GEOCODE_URL=$REVERSE_GEOCODE_URL
+BIGDATA_REVERSE_URL=$BIGDATA_REVERSE_URL
+GEOCODE_USER_AGENT=$GEOCODE_USER_AGENT
 EOF
 }
 
@@ -225,6 +237,11 @@ ASGI module:           $APP_MODULE
 Migrate on start:      $MIGRATE_ON_START
 Install deps on start: $INSTALL_DEPS_ON_START
 Virtual env path:      $VENV_PATH
+Geocode provider:      $GEOCODE_PROVIDER
+Geocode timeout:       $GEOCODE_TIMEOUT
+AMap key:              ${AMAP_WEB_API_KEY:+configured}
+Reverse geocode URL:   $REVERSE_GEOCODE_URL
+Secondary geocode URL: $BIGDATA_REVERSE_URL
 EOF
 }
 
@@ -258,6 +275,11 @@ Optional environment variables:
   INSTALL_DEPS_ON_START  Default: 1
   PYPI_MIRROR_URL        Default: https://mirrors.aliyun.com/pypi/simple/
   PYPI_TRUSTED_HOST      Default: mirrors.aliyun.com
+  GEOCODE_PROVIDER       Default: auto
+  GEOCODE_TIMEOUT        Default: 8
+  AMAP_WEB_API_KEY       Optional: 高德 Web 服务 Key，国内服务器建议配置
+  REVERSE_GEOCODE_URL    Default: https://nominatim.openstreetmap.org/reverse
+  BIGDATA_REVERSE_URL    Default: https://api.bigdatacloud.net/data/reverse-geocode-client
 EOF
 }
 

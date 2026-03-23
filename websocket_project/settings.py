@@ -9,6 +9,12 @@ SECRET_KEY = 'django-insecure-your-secret-key-here'
 
 DEBUG = False
 ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '.ngrok-free.app', '.ngrok.io', 'chat.6143443.xyz']
+GEOCODE_PROVIDER = os.getenv('GEOCODE_PROVIDER', 'auto')
+GEOCODE_TIMEOUT = float(os.getenv('GEOCODE_TIMEOUT', '8'))
+AMAP_WEB_API_KEY = os.getenv('AMAP_WEB_API_KEY', '')
+REVERSE_GEOCODE_URL = os.getenv('REVERSE_GEOCODE_URL', 'https://nominatim.openstreetmap.org/reverse')
+BIGDATA_REVERSE_URL = os.getenv('BIGDATA_REVERSE_URL', 'https://api.bigdatacloud.net/data/reverse-geocode-client')
+GEOCODE_USER_AGENT = os.getenv('GEOCODE_USER_AGENT', 'websocket-chat/1.0 (location reverse geocoding)')
 
 DEFAULT_CSRF_TRUSTED_ORIGINS = [
     'https://*.ngrok-free.app',
@@ -52,6 +58,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'websocket_project.urls'
+LOGIN_URL = '/chat/login/'
 
 TEMPLATES = [
     {

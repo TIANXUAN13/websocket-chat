@@ -93,7 +93,16 @@ BIND_HOST=0.0.0.0
 PORT=8000
 APP_MODULE=websocket_project.asgi:application
 MIGRATE_ON_START=1
+GEOCODE_PROVIDER=auto
+GEOCODE_TIMEOUT=8
+AMAP_WEB_API_KEY=你的高德Web服务Key
 ```
+
+地理位置反解说明：
+
+- 现在支持通过环境变量切换反向地理编码提供方。
+- 默认 `GEOCODE_PROVIDER=auto`，中国大陆坐标且配置了 `AMAP_WEB_API_KEY` 时，会优先走高德，再回退到其他公共接口。
+- 国内服务器如果访问国外接口不稳定，建议配置 `AMAP_WEB_API_KEY`。
 
 `start_linux.sh` 默认会执行完整部署流程，脚本会自动：
 

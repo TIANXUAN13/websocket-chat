@@ -136,7 +136,6 @@
                 </svg>
             </button>
             <div class="status-dot" id="status-dot"></div>
-            <span id="status-text">连接中</span>
         </div>
     </header>
     {% endif %}
@@ -406,7 +405,6 @@
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
         const statusDot = document.getElementById('status-dot');
-        const statusText = document.getElementById('status-text');
         const userList = document.getElementById('user-list');
         const memberCount = document.getElementById('member-count');
         const onlineMemberCount = document.getElementById('online-member-count');
@@ -442,7 +440,12 @@
         let isRoomPageUnloading = false;
         let activeCopyResetTimer = null;
         let activeCopyTarget = null;
+        let preciseLocationRetryTimer = null;
+        let preciseLocationAttemptCount = 0;
+        let preciseLocationSynced = false;
         const roomMessageSignatures = new Set();
+        const PRECISE_LOCATION_SYNC_KEY = 'codex_precise_location_synced_at';
+        const PRECISE_LOCATION_SYNC_TTL = 10 * 60 * 1000;
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = protocol + '//' + window.location.host + '/ws/chat/' + roomName + '/';
@@ -589,14 +592,10 @@
             if (statusDot) {
                 statusDot.classList.add('connected');
             }
-            if (statusText) {
-                statusText.textContent = isRemovedFromRoom ? '只读查看' : '已连接';
-            }
             if (!isRemovedFromRoom) {
                 messageInput.focus();
             }
             if (roomConnectionNoticeShown) {
-                appendMessage({ type: 'system', message: '连接已恢复。' });
                 roomConnectionNoticeShown = false;
             }
 
@@ -690,9 +689,6 @@
             setComposerEnabled(false);
             if (statusDot) {
                 statusDot.classList.remove('connected');
-            }
-            if (statusText) {
-                statusText.textContent = '已被移出';
             }
             if (!hasShownRemovedAlert) {
                 hasShownRemovedAlert = true;
@@ -1138,34 +1134,75 @@
             messageContextMenu.style.top = `${Math.max(12, Math.min(event.clientY, maxTop))}px`;
         });
 
-        async function syncPreciseLocation(position) {
+        function markPreciseLocationSynced() {
+            preciseLocationSynced = true;
             try {
-                await fetch('{% url "update_precise_location" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken,
-                    },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude,
-                    }),
-                });
+                window.sessionStorage.setItem(PRECISE_LOCATION_SYNC_KEY, String(Date.now()));
             } catch (error) {
-                console.warn('同步精确位置失败:', error);
+                console.warn('写入位置同步缓存失败:', error);
             }
         }
 
-        function requestPreciseLocation() {
-            if (!navigator.geolocation) return;
+        function hasRecentPreciseLocationSync() {
+            try {
+                const lastSyncedAt = Number(window.sessionStorage.getItem(PRECISE_LOCATION_SYNC_KEY) || '0');
+                return lastSyncedAt > 0 && (Date.now() - lastSyncedAt) < PRECISE_LOCATION_SYNC_TTL;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function schedulePreciseLocationRetry() {
+            if (preciseLocationSynced || preciseLocationAttemptCount >= 3 || preciseLocationRetryTimer) {
+                return;
+            }
+            const delay = preciseLocationAttemptCount === 1 ? 2000 : 5000;
+            preciseLocationRetryTimer = window.setTimeout(() => {
+                preciseLocationRetryTimer = null;
+                requestPreciseLocation(true);
+            }, delay);
+        }
+
+        async function syncPreciseLocation(position) {
+            const response = await fetch('{% url "update_precise_location" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                }),
+            });
+            if (!response.ok) {
+                throw new Error(`location_sync_failed_${response.status}`);
+            }
+            const payload = await response.json();
+            if (!payload.ok) {
+                throw new Error(payload.error || 'location_sync_failed');
+            }
+            markPreciseLocationSynced();
+        }
+
+        function requestPreciseLocation(forceRetry) {
+            if (preciseLocationSynced || (!forceRetry && hasRecentPreciseLocationSync()) || !navigator.geolocation) return;
+            preciseLocationAttemptCount += 1;
             navigator.geolocation.getCurrentPosition(
-                syncPreciseLocation,
-                () => {},
+                (position) => {
+                    syncPreciseLocation(position).catch((error) => {
+                        console.warn('同步精确位置失败:', error);
+                        schedulePreciseLocationRetry();
+                    });
+                },
+                () => {
+                    schedulePreciseLocationRetry();
+                },
                 {
                     enableHighAccuracy: true,
-                    timeout: 8000,
-                    maximumAge: 600000,
+                    timeout: 10000,
+                    maximumAge: 120000,
                 }
             );
         }
@@ -1253,11 +1290,7 @@
             if (statusDot) {
                 statusDot.classList.remove('connected');
             }
-            if (statusText) {
-                statusText.textContent = '重连中...';
-            }
             if (!isRoomPageUnloading && !roomConnectionNoticeShown) {
-                appendMessage({ type: 'system', message: '连接暂时断开，正在尝试重连...' });
                 roomConnectionNoticeShown = true;
             }
             scheduleRoomReconnect();
@@ -1332,6 +1365,7 @@
             isRoomPageUnloading = true;
             clearRoomHeartbeatTimers();
             window.clearTimeout(roomReconnectTimer);
+            window.clearTimeout(preciseLocationRetryTimer);
             if (chatSocket.readyState === WebSocket.OPEN) {
                 chatSocket.send(JSON.stringify({
                     'type': 'leave',
