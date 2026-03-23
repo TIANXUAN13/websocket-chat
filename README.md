@@ -9,6 +9,12 @@
 - Daphne
 - SQLite
 
+## Python 版本说明
+
+- `main` 分支当前使用 Django 5.2，要求 Python 3.10 及以上。
+- `dev-py39` 分支已切换到 Django 4.2 LTS，可用于 Python 3.9.20 服务器部署。
+- Linux 启动脚本未写死 Python 小版本，会使用系统中的 `python3` 创建虚拟环境。
+
 ## 本地启动
 
 在项目根目录执行：

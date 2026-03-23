@@ -1,5 +1,7 @@
-Django==5.2.11
-channels==4.3.2
+# Python 3.9 compatible dependency set.
+# Django 5.2 requires Python 3.10+, so we stay on the 4.2 LTS line for Python 3.9.20 deployments.
+Django==4.2.29
+channels==4.2.1
 daphne==4.2.1
 Pillow==11.3.0
 requests==2.32.5
