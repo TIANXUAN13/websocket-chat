@@ -42,6 +42,9 @@ body {
         radial-gradient(circle at top right, rgba(201, 233, 222, 0.65), transparent 26%),
         linear-gradient(180deg, #f6f1e8 0%, #efe6da 100%);
     color: var(--text-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 
 a {
@@ -1977,6 +1980,14 @@ select.form-input {
     pointer-events: auto;
 }
 
+.search-highlight-mark {
+    padding: 0 0.18em;
+    border-radius: 0.45em;
+    background: rgba(223, 139, 79, 0.22);
+    color: inherit;
+    font-weight: 700;
+}
+
 .create-room-card {
     padding: 16px;
     border-radius: 22px;
@@ -2169,6 +2180,42 @@ select.form-input {
 
 .friend-name-list {
     align-content: start;
+}
+
+.subpanel-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border-radius: 999px;
+    background: rgba(250, 242, 233, 0.92);
+    border: 1px solid rgba(104, 74, 52, 0.08);
+}
+
+.subpanel-tab {
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 14px;
+    background: transparent;
+    color: rgba(88, 63, 44, 0.72);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.subpanel-tab.active {
+    background: linear-gradient(180deg, rgba(214, 127, 84, 0.16) 0%, rgba(196, 91, 54, 0.12) 100%);
+    color: #3f2d20;
+    box-shadow: 0 8px 16px rgba(62, 44, 31, 0.06);
+}
+
+.contact-subpanel {
+    display: block;
+}
+
+.contact-subpanel[hidden] {
+    display: none !important;
 }
 
 .friend-list-item.active,
@@ -2396,6 +2443,12 @@ select.form-input {
     color: var(--text-strong);
     font-weight: 800;
     margin-bottom: 5px;
+}
+
+.thread-list-item .room-title {
+    font-weight: 700;
+    line-height: 1.22;
+    letter-spacing: -0.01em;
 }
 
 .room-summary {
