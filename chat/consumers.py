@@ -134,6 +134,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'payload': payload
             }
         )
+        await self.notify_room_summary_refresh()
 
     async def handle_join(self, data):
         self.user = data.get('user', '匿名用户')
@@ -606,6 +607,37 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return normalized[:2]
         return normalized[:2].upper()
 
+    async def notify_room_summary_refresh(self):
+        usernames = await self.get_room_summary_usernames()
+        for username in usernames:
+            await self.channel_layer.group_send(
+                InboxSummaryConsumer.build_group_name(username),
+                {
+                    'type': 'inbox_summary_refresh',
+                }
+            )
+
+    @database_sync_to_async
+    def get_room_summary_usernames(self):
+        from django.contrib.auth.models import User
+        from .models import Room, RoomMembership
+
+        usernames = set()
+        try:
+            room = Room.objects.select_related('created_by').get(name=self.room_name)
+        except Room.DoesNotExist:
+            return []
+
+        if room.created_by_id:
+            usernames.add(room.created_by.username)
+
+        member_usernames = RoomMembership.objects.filter(
+            room=room,
+            is_active=True,
+        ).select_related('user').values_list('user__username', flat=True)
+        usernames.update(member_usernames)
+        return list(usernames)
+
 
 class DirectChatConsumer(AsyncWebsocketConsumer):
     @staticmethod
@@ -667,6 +699,7 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
                 'payload': saved_payload,
             }
         )
+        await self.notify_direct_summary_refresh()
 
     async def direct_message_event(self, event):
         await self.send(text_data=json.dumps(event['payload']))
@@ -742,3 +775,56 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
             },
         )
         return profile
+
+    async def notify_direct_summary_refresh(self):
+        usernames = {
+            (self.current_user.username or '').strip(),
+            (self.other_username or '').strip(),
+        }
+        for username in usernames:
+            if not username:
+                continue
+            await self.channel_layer.group_send(
+                InboxSummaryConsumer.build_group_name(username),
+                {
+                    'type': 'inbox_summary_refresh',
+                }
+            )
+
+
+class InboxSummaryConsumer(AsyncWebsocketConsumer):
+    @staticmethod
+    def build_group_name(username):
+        normalized = (username or '').strip().lower()
+        user_hash = hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:32]
+        return f"inbox_{user_hash}"
+
+    async def connect(self):
+        self.current_user = self.scope.get('user')
+        if not self.current_user or not self.current_user.is_authenticated:
+            await self.close()
+            return
+
+        self.summary_group_name = self.build_group_name(self.current_user.username)
+        await self.channel_layer.group_add(self.summary_group_name, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, code):
+        if hasattr(self, 'summary_group_name'):
+            await self.channel_layer.group_discard(self.summary_group_name, self.channel_name)
+
+    async def receive(self, text_data, bytes_data=None):
+        try:
+            payload = json.loads(text_data or '{}')
+        except json.JSONDecodeError:
+            return
+
+        if payload.get('type') == 'ping':
+            await self.send(text_data=json.dumps({
+                'type': 'pong',
+            }))
+
+    async def inbox_summary_refresh(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'summary_refresh',
+        }))

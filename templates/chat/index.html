@@ -548,6 +548,10 @@
         let quickActionHideTimer = null;
         let threadSummarySyncTimer = null;
         let isThreadSummarySyncing = false;
+        let inboxSummarySocket = null;
+        let inboxSummaryReconnectTimer = null;
+        let inboxSummaryRefreshDebounceTimer = null;
+        let inboxSummaryReconnectAttempts = 0;
 
         function toggleQuickAction(forceState) {
             if (!quickActionMenu || !quickActionTrigger) return;
@@ -649,18 +653,62 @@
             }
         }
 
+        function requestThreadListSummarySync(delay = 0) {
+            window.clearTimeout(inboxSummaryRefreshDebounceTimer);
+            inboxSummaryRefreshDebounceTimer = window.setTimeout(() => {
+                inboxSummaryRefreshDebounceTimer = null;
+                syncThreadListSummary();
+            }, delay);
+        }
+
         function scheduleThreadListSummarySync() {
             window.clearInterval(threadSummarySyncTimer);
             threadSummarySyncTimer = window.setInterval(syncThreadListSummary, 8000);
         }
 
-        window.addEventListener('focus', syncThreadListSummary);
+        function scheduleInboxSummaryReconnect() {
+            if (inboxSummaryReconnectTimer) return;
+            const delay = Math.min(8000, 1000 * (2 ** inboxSummaryReconnectAttempts));
+            inboxSummaryReconnectAttempts += 1;
+            inboxSummaryReconnectTimer = window.setTimeout(() => {
+                inboxSummaryReconnectTimer = null;
+                connectInboxSummarySocket();
+            }, delay);
+        }
+
+        function connectInboxSummarySocket() {
+            if (inboxSummarySocket && (inboxSummarySocket.readyState === WebSocket.OPEN || inboxSummarySocket.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            inboxSummarySocket = new WebSocket(`${protocol}//${window.location.host}/ws/inbox/summary/`);
+            inboxSummarySocket.addEventListener('open', () => {
+                inboxSummaryReconnectAttempts = 0;
+                requestThreadListSummarySync();
+            });
+            inboxSummarySocket.addEventListener('message', (event) => {
+                try {
+                    const payload = JSON.parse(event.data || '{}');
+                    if (payload.type === 'summary_refresh') {
+                        requestThreadListSummarySync(120);
+                    }
+                } catch (error) {
+                    console.warn('解析会话摘要推送失败:', error);
+                }
+            });
+            inboxSummarySocket.addEventListener('close', () => {
+                scheduleInboxSummaryReconnect();
+            });
+        }
+
+        window.addEventListener('focus', () => requestThreadListSummarySync());
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
-                syncThreadListSummary();
+                requestThreadListSummarySync();
             }
         });
 
+        connectInboxSummarySocket();
         syncThreadListSummary();
         scheduleThreadListSummarySync();
     </script>
