@@ -89,6 +89,14 @@ def get_thread_preview_text(message_text, limit=36):
     return raw[:limit]
 
 
+def get_room_hub_url(room_name):
+    return f"{reverse('chat_index')}?{urlencode({'thread_type': 'room', 'target': room_name})}"
+
+
+def get_direct_hub_url(username):
+    return f"{reverse('chat_index')}?{urlencode({'thread_type': 'direct', 'target': username})}"
+
+
 ADMIN_PAGE_SIZE_OPTIONS = (10, 20, 50, 100)
 
 
@@ -187,7 +195,9 @@ def compress_image_upload(uploaded_file, base_name, upload_dir):
     normalized_base = base_name or 'file'
     safe_name = ''.join(ch for ch in normalized_base.lower() if ch.isalnum() or ch == '_') or 'file'
     hashed_suffix = hashlib.sha1(normalized_base.encode('utf-8')).hexdigest()[:10]
-    return ContentFile(content, name=f'{upload_dir}/{safe_name}_{hashed_suffix}.jpg')
+    # ImageField.save() already prepends the model field's upload_to path.
+    # Returning only the filename avoids duplicated paths like avatars/avatars/*.
+    return ContentFile(content, name=f'{safe_name}_{hashed_suffix}.jpg')
 
 
 def compress_avatar_upload(uploaded_file, username):
@@ -684,10 +694,8 @@ def delete_room(request, room_name):
 def room(request, room_name):
     """具体聊天室页面"""
     embed_mode = request.GET.get('embed') == '1'
-    if embed_mode:
-        user_profile_next_url = f"{reverse('chat_index')}?{urlencode({'thread_type': 'room', 'target': room_name})}"
-    else:
-        user_profile_next_url = request.get_full_path()
+    room_hub_url = get_room_hub_url(room_name)
+    user_profile_next_url = room_hub_url
 
     def redirect_to_room(target_room_name):
         target_url = reverse('chat_room', args=[target_room_name])
@@ -853,6 +861,7 @@ def room(request, room_name):
     ).select_related('friend', 'friend__chat_profile').distinct()
     return render(request, 'chat/room.html', {
         'room': room,
+        'room_hub_url': room_hub_url,
         'room_avatars': DEFAULT_ROOM_AVATARS,
         'room_admin_count': room.memberships.filter(is_active=True, is_admin=True).count(),
         'room_name': room.name,
@@ -1216,7 +1225,10 @@ def direct_chat(request, username):
     state.save(update_fields=['deleted_at', 'last_read_at'])
     own_profile = get_or_create_chat_profile(request.user)
     other_profile = get_or_create_chat_profile(other_user)
+    direct_hub_url = get_direct_hub_url(other_user.username)
     next_url = get_safe_next_url(request, fallback_name='chat_index')
+    if next_url == reverse('chat_index'):
+        next_url = direct_hub_url
 
     if request.method == 'POST':
         action = request.POST.get('action', 'send')
@@ -1257,6 +1269,7 @@ def direct_chat(request, username):
         'inbox_badge_count': inbox_context['pending_friend_requests_count'],
         'embed_mode': embed_mode,
         'next_url': next_url,
+        'direct_hub_url': direct_hub_url,
     })
 
 

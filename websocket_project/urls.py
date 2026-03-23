@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.conf import settings
 from django.urls import path, include, re_path
 from django.conf.urls.static import static
+from django.views.static import serve
 from django.views.generic import RedirectView
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from chat import views as chat_views
@@ -30,7 +31,13 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += staticfiles_urlpatterns()
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Keep uploaded media reachable even when DEBUG is off during local testing.
+# django.conf.urls.static.static() becomes a no-op when DEBUG is False, so
+# we wire the media route explicitly here.
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+]
 
 urlpatterns += [
     re_path(r'^.*$', chat_views.not_found_page),

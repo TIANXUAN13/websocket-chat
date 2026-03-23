@@ -71,15 +71,25 @@
         .playful-login-brand-mark svg { width: 18px; height: 18px; }
         .playful-characters { position: relative; min-height: 480px; }
         .playful-character {
-            --look-x: 0px; --look-y: 0px; --body-skew: 0deg;
-            position: absolute; bottom: 0; transform: skewX(var(--body-skew));
-            transform-origin: bottom center; transition: transform 220ms ease, height 220ms ease, left 220ms ease;
+            --look-x: 0px; --look-y: 0px; --face-x: 0px; --face-y: 0px; --mouth-x: 0px; --mouth-y: 0px;
+            --body-skew: 0deg; --body-extra-skew: 0deg;
+            position: absolute; bottom: 0;
+            transform: skewX(calc(var(--body-skew) + var(--body-extra-skew)));
+            transform-origin: bottom center;
+            transition: transform 220ms ease, height 220ms ease, left 220ms ease;
         }
         .playful-character-purple { left: 82px; width: 188px; height: 388px; border-radius: 12px 12px 0 0; background: #6c3ff5; z-index: 1; }
         .playful-character-black { left: 252px; width: 128px; height: 304px; border-radius: 10px 10px 0 0; background: #242424; z-index: 2; }
         .playful-character-orange { left: 6px; width: 248px; height: 196px; border-radius: 128px 128px 0 0; background: #ff9b6b; z-index: 3; }
         .playful-character-yellow { left: 324px; width: 144px; height: 228px; border-radius: 72px 72px 0 0; background: #e8d754; z-index: 4; }
-        .playful-eyes { position: absolute; display: flex; align-items: center; gap: 18px; }
+        .playful-eyes {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            transform: translate(var(--face-x), var(--face-y));
+            transition: transform 120ms ease-out, left 220ms ease, top 220ms ease;
+        }
         .playful-character-purple .playful-eyes { left: 46px; top: 42px; }
         .playful-character-black .playful-eyes { left: 28px; top: 34px; gap: 14px; }
         .playful-character-orange .playful-eyes { left: 88px; top: 92px; gap: 28px; }
@@ -96,13 +106,32 @@
         }
         .playful-pupil { width: 7px; height: 7px; }
         .playful-pupil-solid { width: 12px; height: 12px; }
-        .playful-mouth { position: absolute; left: 40px; top: 94px; width: 64px; height: 4px; border-radius: 999px; background: #242424; }
-        .playful-login-shell.is-typing .playful-character-purple { left: 118px; height: 424px; }
-        .playful-login-shell.is-typing .playful-character-black { left: 272px; }
+        .playful-mouth {
+            position: absolute;
+            left: 40px;
+            top: 94px;
+            width: 64px;
+            height: 4px;
+            border-radius: 999px;
+            background: #242424;
+            transform: translate(var(--mouth-x), var(--mouth-y));
+            transition: transform 120ms ease-out;
+        }
+        .playful-login-shell.has-active-field .playful-character-purple {
+            --body-extra-skew: 0deg;
+            height: 424px;
+            transform: skewX(-14deg);
+            transform-origin: 72% 100%;
+        }
+        .playful-login-shell.has-active-field .playful-character-black {
+            --body-extra-skew: 0deg;
+            transform: skewX(-12deg);
+            transform-origin: 70% 100%;
+        }
         .playful-login-shell.is-peeking .playful-character-purple,
         .playful-login-shell.is-peeking .playful-character-black,
         .playful-login-shell.is-peeking .playful-character-orange,
-        .playful-login-shell.is-peeking .playful-character-yellow { transform: skewX(0deg); }
+        .playful-login-shell.is-peeking .playful-character-yellow { transform: skewX(8deg); }
         .playful-login-copy h1 { margin: 0 0 12px; font-size: clamp(2.5rem, 5vw, 4rem); line-height: 0.96; letter-spacing: -0.05em; }
         .playful-login-panel {
             padding: 52px 44px; background: rgba(255,255,255,0.94); display: flex;
@@ -154,6 +183,9 @@
         .playful-password-wrap {
             position: relative;
             width: 100%;
+            display: flex;
+            align-items: center;
+            isolation: isolate;
         }
         .playful-password-wrap .playful-input {
             padding-right: 78px;
@@ -161,20 +193,29 @@
         .playful-toggle {
             position: absolute;
             top: 50%;
-            right: 10px;
+            right: 12px;
             transform: translateY(-50%);
-            width: 46px;
-            height: 46px;
+            width: 40px;
+            height: 40px;
+            margin: 0;
+            padding: 0;
             border: 1px solid rgba(120, 96, 80, 0.12);
             border-radius: 999px;
             background: rgba(255,255,255,0.78);
             color: #7e6556;
-            display: grid;
-            place-items: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
             box-shadow: 0 8px 20px rgba(92, 64, 46, 0.08);
+            z-index: 2;
         }
-        .playful-toggle-icon { width: 18px; height: 18px; }
+        .playful-toggle-icon {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+        }
+        .playful-toggle-icon[hidden] { display: none; }
         .playful-login-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
         .playful-checkbox { display: inline-flex; align-items: center; gap: 8px; color: var(--text-body); font-size: 14px; }
         .playful-login-tip { color: var(--text-muted); font-size: 13px; }
@@ -364,45 +405,109 @@
         const passwordVisibilityToggle = document.getElementById('password-visibility-toggle');
         const eyeIcon = document.querySelector('.playful-toggle-icon-eye');
         const eyeOffIcon = document.querySelector('.playful-toggle-icon-eye-off');
+        const characterMotionConfig = {
+            purple: { faceDivX: 20, faceDivY: 30, faceMaxX: 15, faceMaxY: 10, lookDivX: 26, lookDivY: 34, lookMaxX: 5, lookMaxY: 5, bodyDivX: 120, bodyMax: 6 },
+            black: { faceDivX: 24, faceDivY: 30, faceMaxX: 10, faceMaxY: 8, lookDivX: 28, lookDivY: 36, lookMaxX: 4, lookMaxY: 4, bodyDivX: 120, bodyMax: 6 },
+            orange: { faceDivX: 20, faceDivY: 30, faceMaxX: 15, faceMaxY: 10, lookDivX: 24, lookDivY: 32, lookMaxX: 5, lookMaxY: 4, bodyDivX: 120, bodyMax: 6 },
+            yellow: { faceDivX: 20, faceDivY: 30, faceMaxX: 15, faceMaxY: 10, lookDivX: 24, lookDivY: 32, lookMaxX: 5, lookMaxY: 4, bodyDivX: 120, bodyMax: 6 },
+        };
+        let lastMouseX = window.innerWidth * 0.35;
+        let lastMouseY = window.innerHeight * 0.45;
 
-        function movePupils(clientX, clientY) {
+        function clamp(value, min, max) {
+            return Math.max(min, Math.min(max, value));
+        }
+
+        function refreshCharacterMotion() {
+            if (!loginShell) return;
+            const isPeeking = loginShell.classList.contains('is-peeking');
+            const hasActiveField = loginShell.classList.contains('has-active-field');
+
             characters.forEach((character) => {
+                const type = character.dataset.character;
+                const config = characterMotionConfig[type];
+                if (!config) return;
+
                 const rect = character.getBoundingClientRect();
                 const centerX = rect.left + rect.width / 2;
                 const centerY = rect.top + rect.height / 3;
-                const offsetX = Math.max(-8, Math.min(8, (clientX - centerX) / 20));
-                const offsetY = Math.max(-6, Math.min(6, (clientY - centerY) / 28));
-                character.style.setProperty('--look-x', `${offsetX}px`);
-                character.style.setProperty('--look-y', `${offsetY}px`);
-                character.style.setProperty('--body-skew', `${Math.max(-8, Math.min(8, (clientX - centerX) / 80))}deg`);
+                const deltaX = lastMouseX - centerX;
+                const deltaY = lastMouseY - centerY;
+
+                let faceX = clamp(deltaX / config.faceDivX, -config.faceMaxX, config.faceMaxX);
+                let faceY = clamp(deltaY / config.faceDivY, -config.faceMaxY, config.faceMaxY);
+                let lookX = clamp(deltaX / config.lookDivX, -config.lookMaxX, config.lookMaxX);
+                let lookY = clamp(deltaY / config.lookDivY, -config.lookMaxY, config.lookMaxY);
+                let bodySkew = clamp(-deltaX / config.bodyDivX, -config.bodyMax, config.bodyMax);
+
+                if (hasActiveField) {
+                    if (type === 'purple') {
+                        faceX = 8;
+                        faceY = 4;
+                        lookX = 4;
+                        lookY = 4;
+                    } else if (type === 'black') {
+                        faceX = 6;
+                        faceY = 2;
+                        lookX = 3;
+                        lookY = 2;
+                    }
+                }
+
+                if (isPeeking) {
+                    if (type === 'purple') {
+                        faceX = -24;
+                        faceY = -7;
+                        lookX = -4;
+                        lookY = -4;
+                    } else if (type === 'black') {
+                        faceX = -16;
+                        faceY = -6;
+                        lookX = -4;
+                        lookY = -4;
+                    } else if (type === 'orange' || type === 'yellow') {
+                        faceX = -32;
+                        faceY = -5;
+                        lookX = -5;
+                        lookY = -4;
+                    }
+                }
+
+                character.style.setProperty('--face-x', `${faceX}px`);
+                character.style.setProperty('--face-y', `${faceY}px`);
+                character.style.setProperty('--look-x', `${lookX}px`);
+                character.style.setProperty('--look-y', `${lookY}px`);
+                character.style.setProperty('--mouth-x', `${faceX}px`);
+                character.style.setProperty('--mouth-y', `${faceY}px`);
+                character.style.setProperty('--body-skew', `${bodySkew}deg`);
             });
         }
 
+        function updateShellState() {
+            if (!loginShell || !passwordInput || !usernameInput) return;
+            const hasActiveField = document.activeElement === usernameInput || document.activeElement === passwordInput;
+            const isPeeking = passwordInput.value.trim().length > 0 && passwordInput.type === 'text';
+            loginShell.classList.toggle('has-active-field', hasActiveField);
+            loginShell.classList.toggle('is-peeking', isPeeking);
+            refreshCharacterMotion();
+        }
+
         window.addEventListener('mousemove', (event) => {
-            movePupils(event.clientX, event.clientY);
+            lastMouseX = event.clientX;
+            lastMouseY = event.clientY;
+            refreshCharacterMotion();
         });
 
-        function setTypingMode(active) {
-            if (!loginShell) return;
-            loginShell.classList.toggle('is-typing', active);
-        }
-
-        function updatePeekMode() {
-            if (!loginShell || !passwordInput) return;
-            const isPeeking = passwordInput.value.trim().length > 0 && passwordInput.type === 'text';
-            loginShell.classList.toggle('is-peeking', isPeeking);
-        }
-
         if (usernameInput) {
-            usernameInput.addEventListener('focus', () => setTypingMode(true));
-            usernameInput.addEventListener('blur', () => setTypingMode(false));
-            usernameInput.addEventListener('input', () => setTypingMode(true));
+            usernameInput.addEventListener('focus', updateShellState);
+            usernameInput.addEventListener('input', updateShellState);
+            usernameInput.addEventListener('blur', updateShellState);
         }
 
         if (passwordInput) {
-            passwordInput.addEventListener('input', updatePeekMode);
-            passwordInput.addEventListener('focus', updatePeekMode);
-            passwordInput.addEventListener('blur', updatePeekMode);
+            passwordInput.addEventListener('focus', updateShellState);
+            passwordInput.addEventListener('input', updateShellState);
+            passwordInput.addEventListener('blur', updateShellState);
         }
 
         if (passwordVisibilityToggle && passwordInput) {
@@ -415,9 +520,12 @@
                 if (eyeOffIcon) {
                     eyeOffIcon.hidden = nextType !== 'text';
                 }
-                updatePeekMode();
+                updateShellState();
             });
         }
+
+        updateShellState();
+        refreshCharacterMotion();
 
         let blinkToggle = false;
         window.setInterval(() => {

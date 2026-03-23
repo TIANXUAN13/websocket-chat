@@ -1741,6 +1741,9 @@ select.form-input {
     border-radius: 50%;
     display: grid;
     place-items: center;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
     color: #fff9f1;
     font-weight: 800;
     background: linear-gradient(135deg, #cc6c42 0%, #8f3e24 100%);
@@ -1749,8 +1752,11 @@ select.form-input {
 .avatar-photo {
     width: 100%;
     height: 100%;
+    max-width: none;
+    max-height: none;
     display: block;
     object-fit: cover;
+    object-position: center;
     border-radius: inherit;
 }
 
@@ -2206,6 +2212,8 @@ select.form-input {
     border-radius: 16px;
     display: grid;
     place-items: center;
+    position: relative;
+    overflow: hidden;
     flex-shrink: 0;
     background: linear-gradient(135deg, rgba(255, 251, 246, 0.96), rgba(244, 232, 220, 0.88));
     border: 1px solid rgba(104, 74, 52, 0.1);
@@ -2862,6 +2870,8 @@ select.form-input {
     border-radius: 12px;
     display: grid;
     place-items: center;
+    position: relative;
+    overflow: hidden;
     background: linear-gradient(135deg, rgba(195, 90, 54, 0.2), rgba(195, 90, 54, 0.08));
     color: var(--accent-strong);
     font-weight: 800;
@@ -2885,6 +2895,8 @@ select.form-input {
 }
 
 .room-avatar {
+    position: relative;
+    overflow: hidden;
     font-size: 22px;
     line-height: 1;
 }
@@ -3009,6 +3021,8 @@ select.form-input {
     border-radius: 16px;
     display: grid;
     place-items: center;
+    position: relative;
+    overflow: hidden;
     flex-shrink: 0;
     padding: 0 6px;
     background: linear-gradient(135deg, rgba(255, 251, 246, 0.96), rgba(244, 232, 220, 0.88));
@@ -3129,6 +3143,8 @@ select.form-input {
     width: 52px;
     height: 52px;
     border-radius: 18px;
+    position: relative;
+    overflow: hidden;
 }
 
 .compact-stack {
@@ -3307,6 +3323,8 @@ select.form-input {
     border-radius: 14px;
     display: grid;
     place-items: center;
+    position: relative;
+    overflow: hidden;
     background: linear-gradient(135deg, rgba(195, 90, 54, 0.2), rgba(195, 90, 54, 0.08));
     color: var(--accent-strong);
     font-weight: 800;
@@ -3359,6 +3377,8 @@ select.form-input {
     height: 88px;
     font-size: 28px;
     border-radius: 28px;
+    position: relative;
+    overflow: hidden;
 }
 
 .profile-detail-text {
