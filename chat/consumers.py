@@ -68,12 +68,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if hasattr(self, 'room_name') and self.room_name in self.room_users:
             if self.channel_name in self.room_users[self.room_name]:
                 del self.room_users[self.room_name][self.channel_name]
+                users = await self.get_users_dict()
                 
                 await self.channel_layer.group_send(
                     self.room_group_name,
                     {
                         'type': 'user_list',
-                        'users': self.get_users_dict()
+                        'users': users
                     }
                 )
 

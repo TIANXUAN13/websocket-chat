@@ -32,6 +32,23 @@
             </button>
         {% else %}
             </a>
+            {% endif %}
+        {% if use_buttons %}
+            <button class="module-link module-link-icon {% if active_section == 'groups' %}active{% endif %}" type="button" data-panel-target="groups" title="群聊" aria-label="群聊">
+        {% else %}
+            <a class="module-link module-link-icon {% if active_section == 'groups' %}active{% endif %}" href="{% url 'chat_index' %}" title="群聊" aria-label="群聊">
+        {% endif %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M6 20v-2a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v2"/>
+                <circle cx="12" cy="7.5" r="3.5"/>
+                <path d="M3 9.5a2.5 2.5 0 1 0 0 .01"/>
+                <path d="M21 9.5a2.5 2.5 0 1 0 0 .01"/>
+            </svg>
+            <span class="module-link-label">群聊</span>
+        {% if use_buttons %}
+            </button>
+        {% else %}
+            </a>
         {% endif %}
         {% if use_buttons %}
             <button class="module-link module-link-icon {% if active_section == 'moments' %}active{% endif %}" type="button" data-panel-target="moments" title="朋友圈" aria-label="朋友圈">

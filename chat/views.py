@@ -306,10 +306,15 @@ def build_room_threads(user):
     rooms = get_accessible_rooms_queryset(user).prefetch_related('messages')
     embed_version = '20260322n'
     for room in rooms:
-        latest_message = room.messages.order_by('-timestamp').first()
-
         state = get_or_create_room_visit_state(user, room)
-        unread_qs = room.messages.exclude(user=user)
+        visible_messages = room.messages.all()
+        if state.deleted_at:
+            visible_messages = visible_messages.filter(timestamp__gt=state.deleted_at)
+        latest_message = visible_messages.order_by('-timestamp').first()
+        if not latest_message and state.deleted_at:
+            continue
+
+        unread_qs = visible_messages.exclude(user=user)
         if state.last_read_at:
             unread_qs = unread_qs.filter(timestamp__gt=state.last_read_at)
 
@@ -328,6 +333,7 @@ def build_room_threads(user):
             'url': reverse('chat_room', args=[room.name]),
             'embed_url': f"{reverse('chat_room', args=[room.name])}?embed=1&v={embed_version}",
             'inbox_url': f"{reverse('inbox')}?thread_type=room&target={quote(room.name)}",
+            'delete_url': reverse('delete_room_conversation', args=[room.name]),
             'unread_count': unread_qs.count(),
             'last_message_preview': last_message_preview,
             'last_message_at': last_message_at,
@@ -762,6 +768,11 @@ def room(request, room_name):
     except Exception as e:
         print(f"刷新用户地理位置时出错: {e}")
 
+    visit_state = get_or_create_room_visit_state(request.user, room)
+    if visit_state.deleted_at is not None:
+        visit_state.deleted_at = None
+        visit_state.save(update_fields=['deleted_at'])
+
     if request.method == 'POST':
         action = request.POST.get('action', 'room_settings')
 
@@ -1080,6 +1091,7 @@ def inbox_summary(request):
                 'type': item['type'],
                 'name': item['name'],
                 'url': item['url'],
+                'delete_url': item['delete_url'],
                 'unread_count': item['unread_count'],
                 'preview': item['last_message_preview'],
                 'timestamp': timezone.localtime(item['last_message_at']).strftime('%m-%d %H:%M') if item['last_message_at'] else '',
@@ -1112,8 +1124,33 @@ def mark_room_read(request, room_name):
 
     state = get_or_create_room_visit_state(request.user, room)
     state.last_read_at = timezone.now()
-    state.save(update_fields=['last_read_at'])
+    state.deleted_at = None
+    state.save(update_fields=['last_read_at', 'deleted_at'])
     return JsonResponse({'ok': True})
+
+
+@login_required
+@require_POST
+def delete_room_conversation(request, room_name):
+    try:
+        room = Room.objects.get(name=room_name)
+    except Room.DoesNotExist:
+        messages.error(request, '群聊不存在')
+        next_url = request.POST.get('next')
+        if next_url:
+            return redirect(next_url)
+        return redirect('chat_index')
+
+    state = get_or_create_room_visit_state(request.user, room)
+    now = timezone.now()
+    state.deleted_at = now
+    state.last_read_at = now
+    state.save(update_fields=['deleted_at', 'last_read_at'])
+    messages.success(request, f'已从你的会话列表移除群聊「{room.name}」')
+    next_url = request.POST.get('next')
+    if next_url:
+        return redirect(next_url)
+    return redirect('chat_index')
 
 
 @login_required
@@ -1315,7 +1352,10 @@ def delete_direct_conversation(request, username):
         other_user = User.objects.get(username=username)
     except User.DoesNotExist:
         messages.error(request, '用户不存在')
-        return redirect('inbox')
+        next_url = request.POST.get('next')
+        if next_url:
+            return redirect(next_url)
+        return redirect('chat_index')
 
     conversation = get_or_create_direct_conversation(request.user, other_user)
     state, _ = DirectConversationState.objects.get_or_create(conversation=conversation, user=request.user)
@@ -1324,7 +1364,10 @@ def delete_direct_conversation(request, username):
     state.last_read_at = now
     state.save(update_fields=['deleted_at', 'last_read_at'])
     messages.success(request, f'已从你的消息列表移除与 {other_user.username} 的私聊')
-    return redirect('inbox')
+    next_url = request.POST.get('next')
+    if next_url:
+        return redirect(next_url)
+    return redirect('chat_index')
 
 
 @login_required

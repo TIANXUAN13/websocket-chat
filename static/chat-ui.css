@@ -2187,11 +2187,58 @@ select.form-input {
     align-content: start;
 }
 
+.thread-swipe-shell {
+    --thread-swipe-width: 108px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 20px;
+}
+
+.thread-swipe-action {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+    width: var(--thread-swipe-width);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 140ms ease;
+}
+
+.thread-delete-btn {
+    border: 0;
+    border-radius: 0 20px 20px 0;
+    width: var(--thread-swipe-width);
+    height: 100%;
+    background: linear-gradient(180deg, #d96a45 0%, #bf4d2d 100%);
+    color: #fff8f2;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
 .unified-thread-item {
     width: 100%;
     text-align: left;
     cursor: pointer;
     font: inherit;
+    position: relative;
+    z-index: 1;
+    transition: transform 180ms ease;
+    transform: translateX(0);
+    touch-action: pan-y;
+}
+
+.thread-swipe-shell.is-swiped .unified-thread-item {
+    transform: translateX(calc(var(--thread-swipe-width) * -1));
+}
+
+.thread-swipe-shell.is-swiped .thread-swipe-action {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .unified-thread-item.active {
@@ -4206,6 +4253,14 @@ code {
     .friend-list-item,
     .thread-list-item {
         grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .thread-swipe-shell {
+        --thread-swipe-width: 96px;
+    }
+
+    .thread-swipe-shell.is-swiped .unified-thread-item {
+        transform: translateX(calc(var(--thread-swipe-width) * -1));
     }
 
     .sidebar-heading-search {

@@ -21,6 +21,7 @@ urlpatterns = [
     path('users/<str:username>/', views.user_profile, name='user_profile'),
     path('dm/<str:username>/', views.direct_chat, name='direct_chat'),
     path('dm/<str:username>/delete/', views.delete_direct_conversation, name='delete_direct_conversation'),
+    path('rooms/<str:room_name>/delete-conversation/', views.delete_room_conversation, name='delete_room_conversation'),
     path('friends/remove/<str:username>/', views.remove_friend, name='remove_friend'),
     path('friends/request/', views.send_friend_request, name='send_friend_request'),
     path('friends/respond/<int:request_id>/', views.respond_friend_request, name='respond_friend_request'),

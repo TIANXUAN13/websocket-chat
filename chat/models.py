@@ -439,6 +439,7 @@ class RoomVisitState(models.Model):
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='visit_states')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='room_visit_states')
     last_read_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = '群聊访问状态'

@@ -1,11 +1,12 @@
 import io
+import asyncio
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from PIL import Image
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from .consumers import ChatConsumer
 from .models import (
@@ -471,6 +472,39 @@ class ChatMessageSerializationTests(TestCase):
         payload = self.consumer.serialize_message(message)
 
         self.assertEqual(payload['location'], '上海市 · 浦东新区 · 曹路镇')
+
+
+class ChatConsumerDisconnectTests(TestCase):
+    def test_disconnect_sends_materialized_user_list(self):
+        consumer = ChatConsumer()
+        consumer.room_name = 'test-room'
+        consumer.room_group_name = ChatConsumer.build_group_name(consumer.room_name)
+        consumer.channel_name = 'test-channel'
+        consumer.is_group_member = True
+        consumer.channel_layer = type(
+            'Layer',
+            (),
+            {
+                'group_send': AsyncMock(),
+                'group_discard': AsyncMock(),
+            },
+        )()
+        consumer.get_users_dict = AsyncMock(return_value={'alice': {'is_online': True}})
+        consumer.room_users = {
+            consumer.room_name: {
+                consumer.channel_name: {'username': 'alice'}
+            }
+        }
+
+        asyncio.run(consumer.disconnect(1000))
+
+        consumer.channel_layer.group_send.assert_awaited_once_with(
+            consumer.room_group_name,
+            {
+                'type': 'user_list',
+                'users': {'alice': {'is_online': True}},
+            },
+        )
 
 
 class LocationServiceTests(TestCase):

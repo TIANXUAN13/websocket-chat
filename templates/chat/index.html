@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ site_title }}</title>
     {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260323q">
 </head>
 <body class="lobby-page app-hub-page">
     <header class="topbar panel-card">
@@ -106,38 +106,47 @@
             <div class="room-list conversation-list">
                 {% if conversation_threads %}
                     {% for item in conversation_threads %}
-                        <button
-                            type="button"
-                            class="thread-list-item unified-thread-item{% if active_thread and active_thread.type == item.type and active_thread.name == item.name %} active{% endif %}"
-                            data-thread-url="{{ item.embed_url }}"
-                            data-thread-full-url="{{ item.url }}"
-                            data-thread-name="{{ item.name }}"
-                            data-thread-type="{{ item.type }}"
-                            data-thread-target="{{ item.name }}"
-                            data-thread-preview="{{ item.last_message_preview }}"
-                            data-thread-timestamp="{{ item.last_message_at|date:'m-d H:i' }}"
-                        >
-                            <div class="thread-avatar{% if item.avatar_url %} has-photo{% endif %}">
-                                {% if item.avatar_url %}
-                                    <img class="avatar-photo" src="{{ item.avatar_url }}" alt="{{ item.name }} 的头像">
-                                {% else %}
-                                    {{ item.avatar_label|default:item.name|slice:":2" }}
-                                {% endif %}
-                            </div>
-                            <div class="thread-main">
-                                <div class="thread-topline">
-                                    <strong class="room-title">{{ item.name }}</strong>
-                                    {% if item.unread_count > 0 %}
-                                        <span class="thread-count">{{ item.unread_count }}</span>
+                        <div class="thread-swipe-shell{% if item.delete_url %} can-delete{% endif %}"{% if item.delete_url %} data-can-delete="true"{% endif %}>
+                            <button
+                                type="button"
+                                class="thread-list-item unified-thread-item{% if active_thread and active_thread.type == item.type and active_thread.name == item.name %} active{% endif %}"
+                                data-thread-url="{{ item.embed_url }}"
+                                data-thread-full-url="{{ item.url }}"
+                                data-thread-name="{{ item.name }}"
+                                data-thread-type="{{ item.type }}"
+                                data-thread-target="{{ item.name }}"
+                                data-thread-preview="{{ item.last_message_preview }}"
+                                data-thread-timestamp="{{ item.last_message_at|date:'m-d H:i' }}"
+                            >
+                                <div class="thread-avatar{% if item.avatar_url %} has-photo{% endif %}">
+                                    {% if item.avatar_url %}
+                                        <img class="avatar-photo" src="{{ item.avatar_url }}" alt="{{ item.name }} 的头像">
+                                    {% else %}
+                                        {{ item.avatar_label|default:item.name|slice:":2" }}
                                     {% endif %}
                                 </div>
-                                <div class="room-meta">
-                                    <span>{% if item.type == 'room' %}群聊{% else %}私聊{% endif %}</span>
-                                    <span>{{ item.last_message_at|date:"m-d H:i" }}</span>
+                                <div class="thread-main">
+                                    <div class="thread-topline">
+                                        <strong class="room-title">{{ item.name }}</strong>
+                                        {% if item.unread_count > 0 %}
+                                            <span class="thread-count">{{ item.unread_count }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="room-meta">
+                                        <span>{% if item.type == 'room' %}群聊{% else %}私聊{% endif %}</span>
+                                        <span>{{ item.last_message_at|date:"m-d H:i" }}</span>
+                                    </div>
+                                    <div class="thread-preview">{{ item.last_message_preview }}</div>
                                 </div>
-                                <div class="thread-preview">{{ item.last_message_preview }}</div>
-                            </div>
-                        </button>
+                            </button>
+                            {% if item.delete_url %}
+                                <form class="thread-swipe-action" method="post" action="{{ item.delete_url }}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <button class="thread-delete-btn" type="submit" onclick="return confirm('确定从你的会话列表移除这个{% if item.type == "room" %}群聊{% else %}私聊{% endif %}吗？');">删除</button>
+                                </form>
+                            {% endif %}
+                        </div>
                     {% endfor %}
                 {% else %}
                     <div class="quick-action-card">
@@ -149,22 +158,91 @@
         </aside>
 
         <aside class="sidebar-card panel-card room-browser-card panel-switch" data-panel="friends" hidden>
-            <div class="sidebar-heading">
-                <strong>好友列表</strong>
-                <span>这里只保留联系人，点击名字直接进入私聊。</span>
+            <div class="sidebar-heading sidebar-heading-search">
+                <div>
+                    <strong>好友列表</strong>
+                    <span>这里只保留联系人，点击名字直接进入私聊。</span>
+                </div>
+                <div class="conversation-search-shell" id="friend-search-shell">
+                    <button class="settings-trigger search-trigger" type="button" id="friend-search-trigger" aria-label="搜索好友列表" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <path d="M20 20l-3.5-3.5"></path>
+                        </svg>
+                    </button>
+                    <input class="form-input conversation-search-input" id="friend-search" type="search" placeholder="搜索好友..." autocomplete="off">
+                </div>
             </div>
             <div class="room-list friend-name-list">
                 {% if friends %}
                     {% for item in friends %}
-                        <a href="{% url 'chat_index' %}?thread_type=direct&target={{ item.friend.username|urlencode }}" class="friend-list-item friend-list-item-simple">
+                        <a
+                            href="{% url 'chat_index' %}?thread_type=direct&target={{ item.friend.username|urlencode }}"
+                            class="friend-list-item friend-list-item-simple searchable-list-item"
+                            data-search-text="{{ item.friend.username|lower }} {{ item.friend.chat_profile.friend_id|default:''|lower }}"
+                        >
                             <div class="mini-avatar">{{ item.friend.chat_profile.get_avatar_label|default:item.friend.username|slice:":2" }}</div>
                             <strong class="room-title">{{ item.friend.username }}</strong>
                         </a>
                     {% endfor %}
+                    <div class="quick-action-card" id="friend-search-empty" hidden>
+                        <strong>没找到这个好友</strong>
+                        <p>换个用户名或好友 ID 再试试。</p>
+                    </div>
                 {% else %}
                     <div class="quick-action-card">
                         <strong>还没有好友</strong>
                         <p>你可以在右上角 `+` 添加好友，或者在群聊里点别人的头像开始认识。</p>
+                    </div>
+                {% endif %}
+            </div>
+        </aside>
+
+        <aside class="sidebar-card panel-card room-browser-card panel-switch" data-panel="groups" hidden>
+            <div class="sidebar-heading sidebar-heading-search">
+                <div>
+                    <strong>群聊列表</strong>
+                    <span>这里收纳你已加入或创建的群，点进去就能直接发消息。</span>
+                </div>
+                <div class="conversation-search-shell" id="group-search-shell">
+                    <button class="settings-trigger search-trigger" type="button" id="group-search-trigger" aria-label="搜索群聊列表" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <path d="M20 20l-3.5-3.5"></path>
+                        </svg>
+                    </button>
+                    <input class="form-input conversation-search-input" id="group-search" type="search" placeholder="搜索群聊..." autocomplete="off">
+                </div>
+            </div>
+            <div class="room-list friend-name-list">
+                {% if room_items %}
+                    {% for item in room_items %}
+                        <a
+                            href="{% url 'chat_index' %}?thread_type=room&target={{ item.room.name|urlencode }}"
+                            class="friend-list-item friend-list-item-simple searchable-list-item"
+                            data-search-text="{{ item.room.name|lower }} {{ item.room.description|default:''|lower }}"
+                        >
+                            <div class="mini-avatar{% if item.room.avatar_image %} has-photo{% endif %}">
+                                {% if item.room.avatar_image %}
+                                    <img class="avatar-photo" src="{{ item.room.avatar_image.url }}" alt="{{ item.room.name }} 的头像">
+                                {% else %}
+                                    {{ item.room.avatar }}
+                                {% endif %}
+                            </div>
+                            <div class="thread-main">
+                                <strong class="room-title">{{ item.room.name }}</strong>
+                                <div class="thread-preview">{{ item.room.description }}</div>
+                            </div>
+                        </a>
+                    {% endfor %}
+                    <div class="quick-action-card" id="group-search-empty" hidden>
+                        <strong>没找到这个群聊</strong>
+                        <p>换个群名或简介关键词试试。</p>
+                    </div>
+                {% else %}
+                    <div class="quick-action-card">
+                        <strong>还没有群聊</strong>
+                        <p>创建一个房间，或者先去发现页加入现有群聊，这里就会出现列表。</p>
                     </div>
                 {% endif %}
             </div>
@@ -273,6 +351,12 @@
         const conversationSearchShell = document.getElementById('conversation-search-shell');
         const conversationSearchTrigger = document.getElementById('conversation-search-trigger');
         const conversationSearchInput = document.getElementById('conversation-search');
+        const friendSearchShell = document.getElementById('friend-search-shell');
+        const friendSearchTrigger = document.getElementById('friend-search-trigger');
+        const friendSearchInput = document.getElementById('friend-search');
+        const groupSearchShell = document.getElementById('group-search-shell');
+        const groupSearchTrigger = document.getElementById('group-search-trigger');
+        const groupSearchInput = document.getElementById('group-search');
         const welcomeVariants = [
             {
                 label: '欢迎回来',
@@ -354,6 +438,7 @@
         });
 
         let threadItems = Array.from(document.querySelectorAll('.unified-thread-item'));
+        const threadSwipeShells = Array.from(document.querySelectorAll('.thread-swipe-shell[data-can-delete="true"]'));
         const conversationFrame = document.getElementById('conversation-frame');
         const emptyChatShell = document.getElementById('empty-chat-shell');
         const mobileThreadMedia = window.matchMedia('(max-width: 720px)');
@@ -418,6 +503,12 @@
 
         threadItems.forEach((item) => {
             item.addEventListener('click', () => {
+                const swipeShell = item.closest('.thread-swipe-shell');
+                if (swipeShell && swipeShell.classList.contains('is-swiped')) {
+                    swipeShell.classList.remove('is-swiped');
+                    item.style.transform = '';
+                    return;
+                }
                 if (isMobileThreadLayout()) {
                     openThreadPage(item);
                     return;
@@ -433,10 +524,90 @@
 
         if (isMobileThreadLayout()) {
             const initiallyActiveThread = document.querySelector('.unified-thread-item.active');
-            if (initiallyActiveThread) {
+            const navigationEntries = window.performance && typeof window.performance.getEntriesByType === 'function'
+                ? window.performance.getEntriesByType('navigation')
+                : [];
+            const navigationType = navigationEntries.length > 0 ? navigationEntries[0].type : '';
+            if (initiallyActiveThread && navigationType !== 'back_forward') {
                 openThreadPage(initiallyActiveThread);
             }
         }
+
+        function closeSwipedThreads(exceptShell) {
+            threadSwipeShells.forEach((shell) => {
+                if (exceptShell && shell === exceptShell) return;
+                shell.classList.remove('is-swiped');
+            });
+        }
+
+        threadSwipeShells.forEach((shell) => {
+            const content = shell.querySelector('.unified-thread-item');
+            if (!content) return;
+
+            let startX = 0;
+            let deltaX = 0;
+            let isDraggingHorizontally = false;
+            let activePointerId = null;
+            let suppressClick = false;
+
+            function finishSwipeInteraction() {
+                content.style.transition = '';
+                const actionWidth = parseFloat(getComputedStyle(shell).getPropertyValue('--thread-swipe-width')) || 108;
+                const revealThreshold = Math.min(content.offsetWidth / 3, actionWidth * 0.8);
+                suppressClick = isDraggingHorizontally;
+                if (deltaX <= -revealThreshold) {
+                    shell.classList.add('is-swiped');
+                } else {
+                    shell.classList.remove('is-swiped');
+                }
+                content.style.transform = '';
+                activePointerId = null;
+                isDraggingHorizontally = false;
+            }
+
+            content.addEventListener('pointerdown', (event) => {
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                startX = event.clientX;
+                deltaX = 0;
+                isDraggingHorizontally = false;
+                suppressClick = false;
+                activePointerId = event.pointerId;
+                content.style.transition = 'none';
+                closeSwipedThreads(shell);
+                if (content.setPointerCapture) {
+                    content.setPointerCapture(event.pointerId);
+                }
+            });
+
+            content.addEventListener('pointermove', (event) => {
+                if (activePointerId !== event.pointerId) return;
+                deltaX = event.clientX - startX;
+                if (Math.abs(deltaX) > 10) {
+                    isDraggingHorizontally = true;
+                }
+                if (!isDraggingHorizontally) return;
+                const actionWidth = parseFloat(getComputedStyle(shell).getPropertyValue('--thread-swipe-width')) || 108;
+                const limitedOffset = Math.max(-actionWidth, Math.min(0, deltaX));
+                content.style.transform = `translateX(${limitedOffset}px)`;
+            });
+
+            content.addEventListener('pointerup', (event) => {
+                if (activePointerId !== event.pointerId) return;
+                finishSwipeInteraction();
+            });
+
+            content.addEventListener('pointercancel', (event) => {
+                if (activePointerId !== event.pointerId) return;
+                finishSwipeInteraction();
+            });
+
+            content.addEventListener('click', (event) => {
+                if (!suppressClick) return;
+                event.preventDefault();
+                event.stopPropagation();
+                suppressClick = false;
+            }, true);
+        });
 
         function filterConversationThreads(keyword) {
             const normalizedKeyword = (keyword || '').trim().toLowerCase();
@@ -449,6 +620,52 @@
                     || preview.includes(normalizedKeyword)
                     || type.includes(normalizedKeyword);
                 item.hidden = !matched;
+            });
+        }
+
+        function setupExpandableSearch({ shell, trigger, input, items, emptyState }) {
+            if (!shell || !trigger || !input) return;
+
+            function filterItems(keyword) {
+                const normalizedKeyword = (keyword || '').trim().toLowerCase();
+                let visibleCount = 0;
+
+                items.forEach((item) => {
+                    const searchText = (item.dataset.searchText || item.textContent || '').toLowerCase();
+                    const matched = !normalizedKeyword || searchText.includes(normalizedKeyword);
+                    item.hidden = !matched;
+                    if (matched) {
+                        visibleCount += 1;
+                    }
+                });
+
+                if (emptyState) {
+                    emptyState.hidden = !normalizedKeyword || visibleCount > 0;
+                }
+            }
+
+            function toggleSearch(forceState) {
+                const shouldOpen = typeof forceState === 'boolean'
+                    ? forceState
+                    : !shell.classList.contains('open');
+                shell.classList.toggle('open', shouldOpen);
+                trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+                if (shouldOpen) {
+                    requestAnimationFrame(() => input.focus());
+                    return;
+                }
+                input.value = '';
+                filterItems('');
+            }
+
+            trigger.addEventListener('click', () => toggleSearch());
+            input.addEventListener('input', (event) => {
+                filterItems(event.target.value);
+            });
+            input.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    toggleSearch(false);
+                }
             });
         }
 
@@ -541,6 +758,22 @@
             });
         }
 
+        setupExpandableSearch({
+            shell: friendSearchShell,
+            trigger: friendSearchTrigger,
+            input: friendSearchInput,
+            items: Array.from(document.querySelectorAll('[data-panel="friends"] .searchable-list-item')),
+            emptyState: document.getElementById('friend-search-empty'),
+        });
+
+        setupExpandableSearch({
+            shell: groupSearchShell,
+            trigger: groupSearchTrigger,
+            input: groupSearchInput,
+            items: Array.from(document.querySelectorAll('[data-panel="groups"] .searchable-list-item')),
+            emptyState: document.getElementById('group-search-empty'),
+        });
+
         const quickActionTrigger = document.getElementById('quick-action-trigger');
         const quickActionMenu = document.getElementById('quick-action-menu');
         const inboxSummaryUrl = '{% url "inbox_summary" %}';
@@ -583,6 +816,11 @@
             if (!quickActionMenu || quickActionMenu.hidden) return;
             if (event.target.closest('#quick-action-trigger') || event.target.closest('#quick-action-menu')) return;
             toggleQuickAction(false);
+        });
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.thread-swipe-shell')) {
+                closeSwipedThreads();
+            }
         });
 
         window.addEventListener('message', (event) => {
