@@ -1,0 +1,48 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - {{ site_title }}</title>
+    {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
+</head>
+<body class="auth-page">
+    <main class="auth-layout">
+        <section class="auth-panel" style="max-width: 520px; margin: 0 auto;">
+            <div class="brand-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 9v4"/>
+                    <path d="M12 17h.01"/>
+                    <path d="M10.29 3.86l-8 14A1 1 0 0 0 3.16 19h17.68a1 1 0 0 0 .87-1.5l-8-14a1 1 0 0 0-1.74 0z"/>
+                </svg>
+            </div>
+            <h2>404 页面不存在</h2>
+            <p>你访问的地址不存在，页面会在 <strong id="redirect-seconds">3</strong> 秒后自动跳回主页。</p>
+            <div class="profile-actions" style="justify-content: center;">
+                <a class="btn btn-primary" href="{{ home_url }}">立即返回主页</a>
+            </div>
+        </section>
+    </main>
+
+    <script id="home-url" type="application/json">{{ home_url|escapejs }}</script>
+    <script>
+        const homeUrlNode = document.getElementById('home-url');
+        const redirectSeconds = document.getElementById('redirect-seconds');
+        const nextUrl = homeUrlNode ? homeUrlNode.textContent : '/';
+        let remaining = 3;
+
+        const timer = window.setInterval(() => {
+            remaining -= 1;
+            if (redirectSeconds) {
+                redirectSeconds.textContent = String(Math.max(remaining, 0));
+            }
+            if (remaining <= 0) {
+                window.clearInterval(timer);
+                window.location.href = nextUrl;
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

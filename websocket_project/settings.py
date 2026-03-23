@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # 安全密钥（生产环境要修改）
 SECRET_KEY = 'django-insecure-your-secret-key-here'
 
-DEBUG = True
+DEBUG = False
 ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '.ngrok-free.app', '.ngrok.io', 'chat.6143443.xyz']
 
 DEFAULT_CSRF_TRUSTED_ORIGINS = [

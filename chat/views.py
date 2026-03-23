@@ -1693,6 +1693,15 @@ def logout_view(request):
     return redirect('login')
 
 
+def not_found_page(request, exception=None):
+    """统一的 404 页面，并自动返回主页"""
+    home_url = reverse('chat_index') if request.user.is_authenticated else reverse('login')
+    response = render(request, '404.html', {
+        'home_url': home_url,
+    }, status=404)
+    return response
+
+
 def is_admin_user(user):
     """检查用户是否为管理员"""
     return user.is_authenticated and user.is_superuser
