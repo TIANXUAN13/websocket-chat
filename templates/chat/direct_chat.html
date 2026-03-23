@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>与 {{ other_user.username }} 的私聊 - {{ site_title }}</title>
     {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
-    <link rel="stylesheet" href="{% static 'chat-ui.css' %}?v=20260322ab">
+    <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
 </head>
 <body class="room-page direct-chat-page{% if embed_mode %} embed-chat-page{% endif %}">
     {% if not embed_mode %}
