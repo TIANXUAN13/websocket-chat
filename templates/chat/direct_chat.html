@@ -99,6 +99,57 @@
                     <button class="btn btn-danger" type="submit" onclick="return confirm('确定删除这个好友吗？删除后将不能继续直接聊天。');">删除好友</button>
                 </form>
             </div>
+            <div class="quick-action-card stack">
+                <div class="settings-section-head">
+                    <strong>聊天信息</strong>
+                    <span>最近 30 条你当前还能看到的聊天记录。</span>
+                </div>
+                {% if direct_history_info %}
+                    {% for item in direct_history_info %}
+                        <div class="history-entry">
+                            <strong>{{ item.preview|default:"空消息" }}</strong>
+                            <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="history-entry-empty">还没有聊天记录。</div>
+                {% endif %}
+            </div>
+            <div class="quick-action-card stack">
+                <div class="settings-section-head">
+                    <strong>聊天图片</strong>
+                    <span>最近发送的图片会集中显示在这里。</span>
+                </div>
+                {% if direct_history_images %}
+                    {% for item in direct_history_images %}
+                        <a class="history-media-item" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                            <img src="{{ item.attachment.url }}" alt="{{ item.attachment.name }}">
+                            <div>
+                                <strong>{{ item.attachment.name }}</strong>
+                                <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                            </div>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="history-entry-empty">还没有聊天图片。</div>
+                {% endif %}
+            </div>
+            <div class="quick-action-card stack">
+                <div class="settings-section-head">
+                    <strong>聊天文件</strong>
+                    <span>文档和其它附件会在这里聚合。</span>
+                </div>
+                {% if direct_history_files %}
+                    {% for item in direct_history_files %}
+                        <a class="history-entry" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                            <strong>{{ item.attachment.name }}</strong>
+                            <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="history-entry-empty">还没有聊天文件。</div>
+                {% endif %}
+            </div>
         </div>
     </aside>
     {% endif %}
@@ -147,7 +198,7 @@
             <div class="chat-messages direct-message-list" id="direct-message-list">
                 {% if messages_list %}
                     {% for item in messages_list %}
-                        <div class="message {% if item.sender == user %}mine{% else %}other{% endif %}" data-message-user="{{ item.sender.username|escape }}" data-message-time="{{ item.created_at|date:'H:i' }}" data-message-content="{{ item.content|escape }}">
+                        <div class="message {% if item.sender == user %}mine{% else %}other{% endif %}" data-message-id="{{ item.id }}" data-message-user="{{ item.sender.username|escape }}" data-message-time="{{ item.created_at|date:'H:i' }}" data-message-content="{{ item.content|escape }}" data-attachment-kind="{{ item.attachment_type }}" data-attachment-name="{{ item.attachment_name|escape }}">
                             <div class="msg-shell">
                                 <div class="message-avatar{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
                                     {% if item.sender.chat_profile.avatar_image %}
@@ -163,7 +214,21 @@
                                         </div>
                                     </div>
                                     <div class="message-bubble">
-                                        <div class="msg-text">{{ item.content }}</div>
+                                        {% if item.content %}
+                                            <div class="msg-text">{{ item.content }}</div>
+                                        {% endif %}
+                                        {% if item.attachment %}
+                                            {% if item.attachment_type == 'image' %}
+                                                <a class="chat-attachment chat-attachment-image" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                                                    <img src="{{ item.attachment.url }}" alt="{{ item.attachment_name|default:'聊天图片' }}">
+                                                </a>
+                                            {% else %}
+                                                <a class="chat-attachment chat-attachment-file" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                                                    <strong>{{ item.attachment_name }}</strong>
+                                                    <span>点击下载文件</span>
+                                                </a>
+                                            {% endif %}
+                                        {% endif %}
                                         <div class="msg-time">{{ item.created_at|date:"H:i" }}</div>
                                     </div>
                                 </div>
@@ -197,13 +262,88 @@
                     </button>
                 </div>
                 <input class="form-input" type="text" name="content" id="direct-message-input" placeholder="输入私聊内容..." maxlength="2000" autocomplete="off">
+                <div class="chat-attachment-shell">
+                    <button class="btn btn-secondary attachment-trigger" type="button" id="direct-attachment-trigger" aria-label="打开附件面板">+</button>
+                    <input type="file" id="direct-image-input" accept="image/*" hidden>
+                    <input type="file" id="direct-camera-input" accept="image/*" capture="environment" hidden>
+                    <input type="file" id="direct-file-input" hidden>
+                </div>
+                <div class="chat-emoji-shell">
+                    <button class="btn btn-secondary emoji-trigger" type="button" id="direct-emoji-trigger" aria-label="打开表情面板">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                            <circle cx="12" cy="12" r="9"></circle>
+                            <path d="M9 15c.8.9 1.8 1.3 3 1.3s2.2-.4 3-1.3"></path>
+                            <circle cx="9" cy="10" r="1"></circle>
+                            <circle cx="15" cy="10" r="1"></circle>
+                        </svg>
+                    </button>
+                    <input type="file" id="direct-emoji-upload-input" accept="image/*" hidden>
+                </div>
                 <button class="btn btn-primary send-btn-compact" type="submit" id="direct-send-btn" aria-label="发送消息">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M22 2L11 13"/>
                         <path d="M22 2L15 22l-4-9-9-4 20-7z"/>
                     </svg>
-                    <span class="send-btn-label">发送消息</span>
                 </button>
+                <div class="chat-attachment-panel" id="direct-attachment-panel" hidden>
+                    <button class="chat-attachment-action" type="button" data-target="direct-image-input">
+                        <span class="chat-attachment-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                                <rect x="4" y="5" width="16" height="14" rx="3"></rect>
+                                <circle cx="9" cy="10" r="1.5"></circle>
+                                <path d="M20 15l-4.2-4.2a1.5 1.5 0 0 0-2.12 0L8 16.5"></path>
+                            </svg>
+                        </span>
+                        <strong>发图片</strong>
+                        <span>相册里挑一张</span>
+                    </button>
+                    <button class="chat-attachment-action" type="button" data-target="direct-camera-input">
+                        <span class="chat-attachment-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                                <path d="M8 7l1.2-2h5.6L16 7h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z"></path>
+                                <circle cx="12" cy="12.5" r="3.5"></circle>
+                            </svg>
+                        </span>
+                        <strong>拍照片</strong>
+                        <span>直接打开相机</span>
+                    </button>
+                    <button class="chat-attachment-action" type="button" data-target="direct-file-input">
+                        <span class="chat-attachment-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                                <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9z"></path>
+                                <path d="M14 3v6h6"></path>
+                                <path d="M9 13h6M9 17h4"></path>
+                            </svg>
+                        </span>
+                        <strong>发文件</strong>
+                        <span>文档压缩包都行</span>
+                    </button>
+                </div>
+                <div class="chat-emoji-panel" id="direct-emoji-panel" hidden>
+                    <div class="emoji-panel-head">
+                        <strong>常用表情</strong>
+                        <span>点一下就能插入到输入框</span>
+                    </div>
+                    <div class="emoji-grid">
+                        {% for emoji in builtin_emojis %}
+                            <button class="emoji-chip" type="button" data-emoji="{{ emoji }}">{{ emoji }}</button>
+                        {% endfor %}
+                    </div>
+                    <div class="emoji-panel-head">
+                        <strong>图片表情</strong>
+                        <span>上传的和收藏的都放在这里</span>
+                        <button class="emoji-upload-btn" type="button" id="direct-emoji-upload-trigger">上传表情</button>
+                    </div>
+                    <div class="emoji-media-grid" id="direct-emoji-grid">
+                        {% for item in user_emojis %}
+                            <button class="emoji-media-chip" type="button" data-emoji-id="{{ item.id }}" title="{{ item.title|default:'图片表情' }}">
+                                <img src="{{ item.image.url }}" alt="{{ item.title|default:'图片表情' }}">
+                            </button>
+                        {% empty %}
+                            <div class="emoji-empty">还没有图片表情，先上传一张或者收藏聊天图片。</div>
+                        {% endfor %}
+                    </div>
+                </div>
             </form>
         </section>
     </main>
@@ -211,9 +351,27 @@
     <div class="message-context-menu panel-card" id="direct-message-context-menu" hidden>
         <button class="message-context-action" type="button" data-action="copy">复制</button>
         <button class="message-context-action" type="button" data-action="quote">引用</button>
+        <button class="message-context-action" type="button" data-action="favorite-emoji" hidden>收藏表情</button>
     </div>
 
     <script>
+        function showDirectToast(message, isError = false) {
+            let toast = document.getElementById('direct-feedback-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'direct-feedback-toast';
+                toast.className = 'copy-feedback-toast';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = message;
+            toast.classList.toggle('is-error', !!isError);
+            toast.classList.add('is-visible');
+            window.clearTimeout(toast._hideTimer);
+            toast._hideTimer = window.setTimeout(() => {
+                toast.classList.remove('is-visible');
+            }, 1800);
+        }
+
         const directSettingsDrawer = document.getElementById('direct-settings-drawer');
         const directSettingsOverlay = document.getElementById('direct-settings-overlay');
         const directChatForm = document.getElementById('direct-chat-form');
@@ -225,11 +383,25 @@
         const directReplyDraftUser = document.getElementById('direct-reply-draft-user');
         const directReplyDraftText = document.getElementById('direct-reply-draft-text');
         const directReplyDraftClose = document.getElementById('direct-reply-draft-close');
+        const directAttachmentTrigger = document.getElementById('direct-attachment-trigger');
+        const directAttachmentPanel = document.getElementById('direct-attachment-panel');
+        const directImageInput = document.getElementById('direct-image-input');
+        const directCameraInput = document.getElementById('direct-camera-input');
+        const directFileInput = document.getElementById('direct-file-input');
+        const directEmojiTrigger = document.getElementById('direct-emoji-trigger');
+        const directEmojiPanel = document.getElementById('direct-emoji-panel');
+        const directEmojiGrid = document.getElementById('direct-emoji-grid');
+        const directEmojiUploadTrigger = document.getElementById('direct-emoji-upload-trigger');
+        const directEmojiUploadInput = document.getElementById('direct-emoji-upload-input');
         const directMessageContextMenu = document.getElementById('direct-message-context-menu');
         const currentUsername = '{{ user.username }}';
         const otherUsername = {{ other_username_json }};
         const csrfToken = '{{ csrf_token }}';
         const markDirectReadUrl = '{% url "mark_direct_read" other_user.username %}';
+        const directAttachmentUploadUrl = '{% url "upload_direct_attachment" other_user.username %}';
+        const userEmojiUploadUrl = '{% url "upload_user_emoji" %}';
+        const directEmojiSendUrlTemplate = '{% url "send_direct_emoji" other_user.username 999999 %}';
+        const directEmojiFavoriteUrlTemplate = '{% url "favorite_direct_image_emoji" other_user.username 999999 %}';
         const myAppearance = {{ chat_profile_payload_json }};
         const otherAppearance = {{ other_profile_payload_json }};
         let activeDirectMessageElement = null;
@@ -307,6 +479,50 @@
             `;
         }
 
+        function formatAttachmentSize(size) {
+            const normalized = Number(size || 0);
+            if (!normalized) return '';
+            if (normalized < 1024) return `${normalized} B`;
+            if (normalized < 1024 * 1024) return `${(normalized / 1024).toFixed(1)} KB`;
+            return `${(normalized / (1024 * 1024)).toFixed(1)} MB`;
+        }
+
+        function renderAttachmentContent(attachment) {
+            if (!attachment || !attachment.url) {
+                return '';
+            }
+            if (attachment.kind === 'image') {
+                return `
+                    <div class="chat-attachment-stack">
+                        <a class="chat-attachment chat-attachment-image" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">
+                            <img src="${escapeHtml(attachment.url)}" alt="${escapeHtml(attachment.name || '聊天图片')}">
+                        </a>
+                    </div>
+                `;
+            }
+
+            const sizeText = formatAttachmentSize(attachment.size);
+            return `
+                <a class="chat-attachment chat-attachment-file" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">
+                    <strong>${escapeHtml(attachment.name || '聊天文件')}</strong>
+                    <span>${escapeHtml(sizeText || '点击下载文件')}</span>
+                </a>
+            `;
+        }
+
+        function getDirectPreviewText(data, parsedMessage) {
+            if (parsedMessage.body || parsedMessage.fullText) {
+                return parsedMessage.body || parsedMessage.fullText || '';
+            }
+            if (data.attachment?.kind === 'image') {
+                return `[图片] ${data.attachment.name || ''}`.trim();
+            }
+            if (data.attachment?.kind === 'file') {
+                return `[文件] ${data.attachment.name || ''}`.trim();
+            }
+            return '';
+        }
+
         function buildQuotedPayload(draft, body) {
             const encodedQuotedText = encodeURIComponent(draft.text || '');
             return `[[quote|${draft.user || ''}|${draft.time || ''}|${encodedQuotedText}]]\n${body}`;
@@ -331,6 +547,36 @@
             directMessageContextMenu.hidden = true;
         }
 
+        function updateDirectContextMenuActions(messageElement) {
+            const favoriteAction = directMessageContextMenu.querySelector('[data-action="favorite-emoji"]');
+            if (!favoriteAction) return;
+            favoriteAction.hidden = !messageElement?.querySelector('.chat-attachment-image');
+        }
+
+        function showDirectContextMenuAt(messageElement, clientX, clientY, anchorRect = null) {
+            activeDirectMessageElement = messageElement;
+            updateDirectContextMenuActions(messageElement);
+            directMessageContextMenu.hidden = false;
+            const menuWidth = directMessageContextMenu.offsetWidth || 180;
+            const menuHeight = directMessageContextMenu.offsetHeight || 120;
+            const maxLeft = window.innerWidth - menuWidth - 12;
+            const maxTop = window.innerHeight - menuHeight - 12;
+            let nextLeft = clientX;
+            let nextTop = clientY;
+            if (anchorRect) {
+                nextLeft = anchorRect.right - 8;
+                nextTop = anchorRect.bottom + 8;
+                if (nextLeft > maxLeft) {
+                    nextLeft = anchorRect.left - menuWidth + 8;
+                }
+                if (nextTop > maxTop) {
+                    nextTop = anchorRect.top - menuHeight - 8;
+                }
+            }
+            directMessageContextMenu.style.left = `${Math.max(12, Math.min(nextLeft, maxLeft))}px`;
+            directMessageContextMenu.style.top = `${Math.max(12, Math.min(nextTop, maxTop))}px`;
+        }
+
         function notifyParentThreadStatus(previewText, timestampText, unreadCount = 0) {
             if (window.parent === window || !window.parent) return;
             window.parent.postMessage({
@@ -346,7 +592,12 @@
         function syncParentThreadStatusFromElement(messageElement) {
             if (!messageElement) return;
             const parsedMessage = parseQuotedMessage(messageElement.dataset.messageContent || '');
-            notifyParentThreadStatus(parsedMessage.body || parsedMessage.fullText || '', messageElement.dataset.messageTime || '', 0);
+            const attachmentKind = messageElement.dataset.attachmentKind || '';
+            const attachmentName = messageElement.dataset.attachmentName || '';
+            const previewText = parsedMessage.body || parsedMessage.fullText || (
+                attachmentKind === 'image' ? `[图片] ${attachmentName}` : (attachmentKind === 'file' ? `[文件] ${attachmentName}` : '')
+            );
+            notifyParentThreadStatus(previewText, messageElement.dataset.messageTime || '', 0);
         }
 
         async function copyDirectMessageText(messageElement) {
@@ -505,9 +756,12 @@
             }
             directMessageSignatures.add(signature);
             const parsedMessage = parseQuotedMessage(normalizedMessage);
+            msgDiv.dataset.messageId = data.id || '';
             msgDiv.dataset.messageUser = data.user || '';
             msgDiv.dataset.messageTime = timeStr;
             msgDiv.dataset.messageContent = normalizedMessage;
+            msgDiv.dataset.attachmentKind = data.attachment?.kind || '';
+            msgDiv.dataset.attachmentName = data.attachment?.name || '';
             msgDiv.innerHTML = `
                 <div class="msg-shell">
                     <div class="message-avatar${data.avatar_url ? ' has-photo' : ''}">${data.avatar_url ? `<img class="avatar-photo" src="${escapeHtml(data.avatar_url)}" alt="${escapeHtml(data.user)} 的头像">` : escapeHtml(data.avatar_label)}</div>
@@ -519,6 +773,7 @@
                         </div>
                         <div class="message-bubble">
                             ${renderMessageContent(parsedMessage)}
+                            ${renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id })}
                             <div class="msg-time">${timeStr}</div>
                         </div>
                     </div>
@@ -612,6 +867,132 @@
             markDirectAsRead();
         }
 
+        function toggleDirectAttachmentPanel(forceState) {
+            if (!directAttachmentPanel || !directAttachmentTrigger) return;
+            const shouldOpen = typeof forceState === 'boolean'
+                ? forceState
+                : directAttachmentPanel.hidden;
+            directAttachmentPanel.hidden = !shouldOpen;
+            directAttachmentTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            if (shouldOpen) {
+                toggleDirectEmojiPanel(false);
+            }
+        }
+
+        function toggleDirectEmojiPanel(forceState) {
+            if (!directEmojiPanel || !directEmojiTrigger) return;
+            const shouldOpen = typeof forceState === 'boolean'
+                ? forceState
+                : directEmojiPanel.hidden;
+            directEmojiPanel.hidden = !shouldOpen;
+            directEmojiTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            if (shouldOpen) {
+                toggleDirectAttachmentPanel(false);
+            }
+        }
+
+        function insertDirectEmojiText(emoji) {
+            if (!directMessageInput || !emoji) return;
+            const start = directMessageInput.selectionStart ?? directMessageInput.value.length;
+            const end = directMessageInput.selectionEnd ?? directMessageInput.value.length;
+            const current = directMessageInput.value || '';
+            directMessageInput.value = `${current.slice(0, start)}${emoji}${current.slice(end)}`;
+            const cursor = start + emoji.length;
+            directMessageInput.focus();
+            directMessageInput.setSelectionRange(cursor, cursor);
+        }
+
+        function appendDirectEmojiChip(item) {
+            if (!directEmojiGrid || !item?.id || !item?.url) return;
+            const empty = directEmojiGrid.querySelector('.emoji-empty');
+            if (empty) empty.remove();
+            const chip = document.createElement('button');
+            chip.className = 'emoji-media-chip';
+            chip.type = 'button';
+            chip.dataset.emojiId = String(item.id);
+            chip.title = item.title || '图片表情';
+            chip.innerHTML = `<img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.title || '图片表情')}">`;
+            directEmojiGrid.prepend(chip);
+        }
+
+        async function uploadDirectEmoji(file) {
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            const response = await fetch(userEmojiUploadUrl, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                credentials: 'same-origin',
+                body: formData,
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'emoji_upload_failed');
+            }
+            appendDirectEmojiChip(payload.emoji);
+        }
+
+        async function sendDirectEmoji(emojiId) {
+            const response = await fetch(directEmojiSendUrlTemplate.replace('999999', encodeURIComponent(emojiId)), {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'emoji_send_failed');
+            }
+            if (!directSocket || directSocket.readyState !== WebSocket.OPEN) {
+                appendDirectMessage(payload.message);
+            }
+            showDirectToast('图片表情已发出');
+        }
+
+        async function favoriteDirectEmoji(messageId) {
+            const response = await fetch(directEmojiFavoriteUrlTemplate.replace('999999', encodeURIComponent(messageId)), {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'emoji_favorite_failed');
+            }
+            appendDirectEmojiChip(payload.emoji);
+        }
+
+        async function uploadDirectAttachment(file) {
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                directSendBtn.disabled = true;
+                const response = await fetch(directAttachmentUploadUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                    },
+                    credentials: 'same-origin',
+                    body: formData,
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.error || 'upload_failed');
+                }
+                if (!directSocket || directSocket.readyState !== WebSocket.OPEN) {
+                    appendDirectMessage(payload.message);
+                }
+                toggleDirectAttachmentPanel(false);
+            } catch (error) {
+                window.alert(error.message === '附件不能超过 12MB' ? error.message : '上传附件失败，请稍后再试');
+            } finally {
+                directSendBtn.disabled = false;
+                if (directImageInput) directImageInput.value = '';
+                if (directCameraInput) directCameraInput.value = '';
+                if (directFileInput) directFileInput.value = '';
+            }
+        }
+
         function handleDirectSocketClose() {
             clearDirectHeartbeatTimers();
             updateDirectStatus(false);
@@ -649,6 +1030,13 @@
                     text: parsedMessage.body || parsedMessage.fullText || '',
                 });
                 directMessageInput.focus();
+            } else if (action === 'favorite-emoji') {
+                try {
+                    await favoriteDirectEmoji(activeDirectMessageElement.dataset.messageId);
+                    showDirectToast('已收藏到图片表情');
+                } catch (error) {
+                    showDirectToast('收藏表情失败，请稍后再试', true);
+                }
             }
 
             hideDirectContextMenu();
@@ -668,14 +1056,22 @@
             }
 
             event.preventDefault();
-            activeDirectMessageElement = messageElement;
-            directMessageContextMenu.hidden = false;
-            const menuWidth = directMessageContextMenu.offsetWidth || 180;
-            const menuHeight = directMessageContextMenu.offsetHeight || 120;
-            const maxLeft = window.innerWidth - menuWidth - 12;
-            const maxTop = window.innerHeight - menuHeight - 12;
-            directMessageContextMenu.style.left = `${Math.max(12, Math.min(event.clientX, maxLeft))}px`;
-            directMessageContextMenu.style.top = `${Math.max(12, Math.min(event.clientY, maxTop))}px`;
+            showDirectContextMenuAt(messageElement, event.clientX, event.clientY);
+        });
+
+        directMessageList.addEventListener('click', function(event) {
+            const imageLink = event.target.closest('.chat-attachment-image');
+            const messageElement = event.target.closest('.message');
+            if (imageLink && messageElement) {
+                event.preventDefault();
+                const rect = imageLink.getBoundingClientRect();
+                showDirectContextMenuAt(
+                    messageElement,
+                    rect.left + Math.min(rect.width - 24, 80),
+                    rect.top + Math.min(rect.height - 24, 80),
+                    rect
+                );
+            }
         });
 
         directChatForm.addEventListener('submit', function(event) {
@@ -685,7 +1081,7 @@
                 return;
             }
 
-            if (directSocket.readyState === WebSocket.OPEN) {
+        if (directSocket.readyState === WebSocket.OPEN) {
                 event.preventDefault();
                 const payloadMessage = directReplyDraftState ? buildQuotedPayload(directReplyDraftState, message) : message;
                 directSocket.send(JSON.stringify({
@@ -698,6 +1094,67 @@
             }
         });
 
+        if (directAttachmentTrigger) {
+            directAttachmentTrigger.addEventListener('click', () => toggleDirectAttachmentPanel());
+        }
+        if (directEmojiTrigger) {
+            directEmojiTrigger.addEventListener('click', () => toggleDirectEmojiPanel());
+        }
+
+        if (directAttachmentPanel) {
+            directAttachmentPanel.addEventListener('click', (event) => {
+                const action = event.target.closest('.chat-attachment-action');
+                if (!action) return;
+                const targetInput = document.getElementById(action.dataset.target || '');
+                if (targetInput) {
+                    targetInput.click();
+                }
+            });
+        }
+
+        [directImageInput, directCameraInput, directFileInput].forEach((input) => {
+            if (!input) return;
+            input.addEventListener('change', (event) => {
+                const [file] = event.target.files || [];
+                uploadDirectAttachment(file);
+            });
+        });
+
+        document.querySelectorAll('.emoji-chip').forEach((chip) => {
+            chip.addEventListener('click', () => insertDirectEmojiText(chip.dataset.emoji || ''));
+        });
+
+        if (directEmojiGrid) {
+            directEmojiGrid.addEventListener('click', async (event) => {
+                const chip = event.target.closest('.emoji-media-chip');
+                if (!chip) return;
+                try {
+                    await sendDirectEmoji(chip.dataset.emojiId);
+                    toggleDirectEmojiPanel(false);
+                } catch (error) {
+                    showDirectToast('发送图片表情失败，请稍后再试', true);
+                }
+            });
+        }
+
+        if (directEmojiUploadTrigger) {
+            directEmojiUploadTrigger.addEventListener('click', () => directEmojiUploadInput?.click());
+        }
+
+        if (directEmojiUploadInput) {
+            directEmojiUploadInput.addEventListener('change', async (event) => {
+                const [file] = event.target.files || [];
+                try {
+                    await uploadDirectEmoji(file);
+                    showDirectToast('图片表情已上传');
+                } catch (error) {
+                    showDirectToast(error.message === '表情只支持图片格式' ? error.message : '上传表情失败，请稍后再试', true);
+                } finally {
+                    directEmojiUploadInput.value = '';
+                }
+            });
+        }
+
         Array.from(directMessageList.querySelectorAll('.message')).forEach(function(messageElement) {
             const isMine = messageElement.classList.contains('mine');
             const bubble = messageElement.querySelector('.message-bubble');
@@ -709,7 +1166,12 @@
             ].join('|'));
             if (bubble) {
                 const timeNode = bubble.querySelector('.msg-time');
-                bubble.innerHTML = `${renderMessageContent(parsedMessage)}${timeNode ? timeNode.outerHTML : ''}`;
+                bubble.innerHTML = `${renderMessageContent(parsedMessage)}${renderAttachmentContent({
+                    url: messageElement.querySelector('.chat-attachment')?.getAttribute('href') || '',
+                    name: messageElement.dataset.attachmentName || '',
+                    kind: messageElement.dataset.attachmentKind || '',
+                    messageId: messageElement.dataset.messageId || '',
+                })}${timeNode ? timeNode.outerHTML : ''}`;
             }
             applyAppearance(messageElement, isMine ? myAppearance : otherAppearance);
         });
@@ -717,6 +1179,12 @@
         document.addEventListener('click', function(event) {
             if (!event.target.closest('.message-context-menu')) {
                 hideDirectContextMenu();
+            }
+            if (!event.target.closest('.chat-attachment-shell')) {
+                toggleDirectAttachmentPanel(false);
+            }
+            if (!event.target.closest('.chat-emoji-shell') && !event.target.closest('.chat-emoji-panel')) {
+                toggleDirectEmojiPanel(false);
             }
         });
 

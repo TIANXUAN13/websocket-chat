@@ -176,6 +176,23 @@ class UserChatProfile(models.Model):
         }
 
 
+class UserEmoji(models.Model):
+    """用户收藏/上传的图片表情"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='emoji_items')
+    title = models.CharField(max_length=60, blank=True, default='', verbose_name='表情名称')
+    image = models.ImageField(upload_to='emoji_items/%Y/%m/', verbose_name='表情图片')
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True, verbose_name='最近使用时间')
+
+    class Meta:
+        verbose_name = '图片表情'
+        verbose_name_plural = '图片表情'
+        ordering = ['-last_used_at', '-created_at']
+
+    def __str__(self):
+        return self.title or f'{self.user.username} emoji {self.pk}'
+
+
 class Room(models.Model):
     """聊天室"""
     JOIN_POLICY_OPEN = 'open'
@@ -323,11 +340,30 @@ class RoomInvitation(models.Model):
 
 class Message(models.Model):
     """消息历史记录"""
+    ATTACHMENT_TYPE_TEXT = 'text'
+    ATTACHMENT_TYPE_IMAGE = 'image'
+    ATTACHMENT_TYPE_FILE = 'file'
+    ATTACHMENT_TYPE_CHOICES = [
+        (ATTACHMENT_TYPE_TEXT, '文本'),
+        (ATTACHMENT_TYPE_IMAGE, '图片'),
+        (ATTACHMENT_TYPE_FILE, '文件'),
+    ]
+
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='messages', verbose_name='房间')
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='用户')
     username = models.CharField(max_length=100, verbose_name='用户名', default='匿名用户')
-    message = models.TextField(verbose_name='消息内容')
+    message = models.TextField(verbose_name='消息内容', blank=True, default='')
     message_type = models.CharField(max_length=20, default='chat', verbose_name='消息类型')
+    attachment = models.FileField(upload_to='chat_attachments/rooms/%Y/%m/', blank=True, null=True, verbose_name='附件')
+    attachment_type = models.CharField(
+        max_length=20,
+        choices=ATTACHMENT_TYPE_CHOICES,
+        default=ATTACHMENT_TYPE_TEXT,
+        verbose_name='附件类型',
+    )
+    attachment_name = models.CharField(max_length=255, blank=True, default='', verbose_name='附件文件名')
+    attachment_mime = models.CharField(max_length=120, blank=True, default='', verbose_name='附件 MIME')
+    attachment_size = models.PositiveIntegerField(default=0, verbose_name='附件大小')
     location_label = models.CharField(max_length=120, blank=True, default='', verbose_name='位置摘要')
     timestamp = models.DateTimeField(auto_now_add=True, verbose_name='发送时间')
     
@@ -423,9 +459,28 @@ class DirectConversationState(models.Model):
 
 class DirectMessage(models.Model):
     """私聊消息"""
+    ATTACHMENT_TYPE_TEXT = 'text'
+    ATTACHMENT_TYPE_IMAGE = 'image'
+    ATTACHMENT_TYPE_FILE = 'file'
+    ATTACHMENT_TYPE_CHOICES = [
+        (ATTACHMENT_TYPE_TEXT, '文本'),
+        (ATTACHMENT_TYPE_IMAGE, '图片'),
+        (ATTACHMENT_TYPE_FILE, '文件'),
+    ]
+
     conversation = models.ForeignKey(DirectConversation, on_delete=models.CASCADE, related_name='messages')
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='direct_messages_sent')
-    content = models.TextField(verbose_name='消息内容')
+    content = models.TextField(verbose_name='消息内容', blank=True, default='')
+    attachment = models.FileField(upload_to='chat_attachments/direct/%Y/%m/', blank=True, null=True, verbose_name='附件')
+    attachment_type = models.CharField(
+        max_length=20,
+        choices=ATTACHMENT_TYPE_CHOICES,
+        default=ATTACHMENT_TYPE_TEXT,
+        verbose_name='附件类型',
+    )
+    attachment_name = models.CharField(max_length=255, blank=True, default='', verbose_name='附件文件名')
+    attachment_mime = models.CharField(max_length=120, blank=True, default='', verbose_name='附件 MIME')
+    attachment_size = models.PositiveIntegerField(default=0, verbose_name='附件大小')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

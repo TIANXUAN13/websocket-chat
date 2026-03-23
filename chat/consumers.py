@@ -565,6 +565,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 location_label = user_location.display_label
 
         return {
+            'id': msg.id,
             'message': msg.message,
             'user': msg.username,
             'type': msg.message_type,
@@ -574,6 +575,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'avatar_label': avatar_label,
             'avatar_url': appearance.get('avatar_url', ''),
             'friend_id': appearance.get('friend_id', ''),
+            'attachment': self.serialize_attachment(msg),
+        }
+
+    def serialize_attachment(self, msg):
+        attachment = getattr(msg, 'attachment', None)
+        if not attachment:
+            return None
+        try:
+            attachment_url = attachment.url
+        except ValueError:
+            return None
+        return {
+            'url': attachment_url,
+            'name': getattr(msg, 'attachment_name', '') or '',
+            'mime': getattr(msg, 'attachment_mime', '') or '',
+            'size': getattr(msg, 'attachment_size', 0) or 0,
+            'kind': getattr(msg, 'attachment_type', 'file') or 'file',
         }
 
     @database_sync_to_async
@@ -755,6 +773,7 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
 
         profile = self.get_or_create_profile(self.current_user)
         return {
+            'id': direct_message.id,
             'type': 'chat',
             'message': direct_message.content,
             'user': self.current_user.username,
@@ -762,6 +781,23 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
             'avatar_label': profile.get_avatar_label(),
             'avatar_url': profile.avatar_url,
             'appearance': profile.to_payload(),
+            'attachment': self.serialize_attachment(direct_message),
+        }
+
+    def serialize_attachment(self, msg):
+        attachment = getattr(msg, 'attachment', None)
+        if not attachment:
+            return None
+        try:
+            attachment_url = attachment.url
+        except ValueError:
+            return None
+        return {
+            'url': attachment_url,
+            'name': getattr(msg, 'attachment_name', '') or '',
+            'mime': getattr(msg, 'attachment_mime', '') or '',
+            'size': getattr(msg, 'attachment_size', 0) or 0,
+            'kind': getattr(msg, 'attachment_type', 'file') or 'file',
         }
 
     def get_or_create_profile(self, user):

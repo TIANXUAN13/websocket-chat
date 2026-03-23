@@ -1,6 +1,8 @@
 import json
 import hashlib
 import io
+import mimetypes
+import os
 import re
 from urllib.parse import quote, urlencode
 
@@ -38,11 +40,13 @@ from .models import (
     DirectMessage,
     FriendRequest,
     Friendship,
+    Message,
     Room,
     RoomInvitation,
     RoomJoinRequest,
     RoomMembership,
     SiteConfiguration,
+    UserEmoji,
     RoomVisitState,
     UserChatProfile,
     UserSession,
@@ -54,7 +58,10 @@ from .services.geoip_service import GeoIPService
 DEFAULT_ROOM_AVATARS = ['💬', '🐱', '🐶', '🐻', '🎮', '📚', '☕', '🌙', '🎵', '🍀']
 MAX_AVATAR_BYTES = 1024 * 1024
 MAX_AVATAR_DIMENSION = 720
+MAX_CHAT_ATTACHMENT_BYTES = 12 * 1024 * 1024
+MAX_CHAT_ATTACHMENT_IMAGE_DIMENSION = 1920
 MAX_ROOM_ADMIN_COUNT = 10
+BUILTIN_EMOJIS = ['😀', '😂', '🥹', '😎', '🥳', '🤔', '😭', '😡', '🥰', '👍', '🙏', '🎉']
 QUOTED_MESSAGE_PATTERN = re.compile(r'^\[\[quote\|([^|\]]*)\|([^|\]]*)\|([^|\]]*)\]\]\n?([\s\S]*)$')
 
 
@@ -87,6 +94,25 @@ def get_thread_preview_text(message_text, limit=36):
         raw = '引用消息'
 
     return raw[:limit]
+
+
+def get_attachment_preview_label(kind, name=''):
+    if kind == 'image':
+        return f'[图片] {name}'.strip()
+    if kind == 'file':
+        return f'[文件] {name}'.strip()
+    return (name or '').strip()
+
+
+def get_message_preview_text(message_text='', attachment_kind='', attachment_name='', limit=36):
+    raw = get_thread_preview_text(message_text, limit=limit)
+    if raw:
+        return raw
+
+    fallback = get_attachment_preview_label(attachment_kind, attachment_name)
+    if not fallback:
+        return ''
+    return fallback[:limit]
 
 
 def get_room_hub_url(room_name):
@@ -208,6 +234,194 @@ def compress_room_avatar_upload(uploaded_file, room_name):
     return compress_image_upload(uploaded_file, f'{room_name}_room_avatar', 'room_avatars')
 
 
+def optimize_chat_image_upload(uploaded_file, base_name):
+    try:
+        image = Image.open(uploaded_file)
+        image = ImageOps.exif_transpose(image)
+    except Exception:
+        raise ValueError('无法识别这张图片，请重新选择 JPG、PNG 或 WebP 图片')
+
+    if image.mode not in ('RGB', 'L'):
+        image = image.convert('RGB')
+    elif image.mode == 'L':
+        image = image.convert('RGB')
+
+    image.thumbnail((MAX_CHAT_ATTACHMENT_IMAGE_DIMENSION, MAX_CHAT_ATTACHMENT_IMAGE_DIMENSION), Image.Resampling.LANCZOS)
+    quality = 90
+    working_image = image
+
+    while True:
+        buffer = io.BytesIO()
+        working_image.save(buffer, format='JPEG', quality=quality, optimize=True, progressive=True)
+        content = buffer.getvalue()
+        if len(content) <= MAX_CHAT_ATTACHMENT_BYTES or quality <= 48:
+            if len(content) <= MAX_CHAT_ATTACHMENT_BYTES:
+                break
+
+            resized_width = max(320, int(working_image.width * 0.9))
+            resized_height = max(320, int(working_image.height * 0.9))
+            if resized_width == working_image.width and resized_height == working_image.height:
+                break
+            working_image = working_image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
+            quality = min(quality + 4, 90)
+            continue
+        quality -= 6
+
+    normalized_base = base_name or 'image'
+    safe_name = ''.join(ch for ch in normalized_base.lower() if ch.isalnum() or ch == '_') or 'image'
+    hashed_suffix = hashlib.sha1(normalized_base.encode('utf-8')).hexdigest()[:10]
+    return ContentFile(content, name=f'{safe_name}_{hashed_suffix}.jpg')
+
+
+def build_attachment_name(base_name, fallback='file'):
+    raw_name = (base_name or fallback).strip()
+    stem, ext = os.path.splitext(raw_name)
+    safe_stem = ''.join(ch for ch in (stem or fallback).lower() if ch.isalnum() or ch in {'_', '-'}) or fallback
+    safe_ext = ''.join(ch for ch in ext.lower() if ch.isalnum() or ch == '.')[:12]
+    hashed_suffix = hashlib.sha1(raw_name.encode('utf-8')).hexdigest()[:10]
+    return f'{safe_stem[:48]}_{hashed_suffix}{safe_ext}'
+
+
+def prepare_chat_attachment(uploaded_file, base_name):
+    content_type = (getattr(uploaded_file, 'content_type', '') or '').lower()
+    original_name = (getattr(uploaded_file, 'name', '') or base_name or 'file').strip() or 'file'
+    size = getattr(uploaded_file, 'size', 0) or 0
+
+    if size > MAX_CHAT_ATTACHMENT_BYTES:
+        raise ValueError('附件不能超过 12MB')
+
+    if content_type.startswith('image/'):
+        optimized = optimize_chat_image_upload(uploaded_file, base_name)
+        return {
+            'file': optimized,
+            'attachment_type': 'image',
+            'attachment_name': original_name,
+            'attachment_mime': 'image/jpeg',
+            'attachment_size': optimized.size,
+        }
+
+    uploaded_file.name = build_attachment_name(original_name)
+    guessed_type = content_type or mimetypes.guess_type(original_name)[0] or 'application/octet-stream'
+    return {
+        'file': uploaded_file,
+        'attachment_type': 'file',
+        'attachment_name': original_name,
+        'attachment_mime': guessed_type,
+        'attachment_size': size,
+    }
+
+
+def build_attachment_payload(message_obj):
+    if not getattr(message_obj, 'attachment', None):
+        return None
+    try:
+        attachment_url = message_obj.attachment.url
+    except ValueError:
+        return None
+    return {
+        'url': attachment_url,
+        'name': getattr(message_obj, 'attachment_name', '') or os.path.basename(message_obj.attachment.name),
+        'mime': getattr(message_obj, 'attachment_mime', '') or '',
+        'size': getattr(message_obj, 'attachment_size', 0) or 0,
+        'kind': getattr(message_obj, 'attachment_type', 'file') or 'file',
+    }
+
+
+def create_user_emoji_from_upload(user, uploaded_file, title=''):
+    attachment_data = prepare_chat_attachment(uploaded_file, f'{user.username}_emoji')
+    if attachment_data['attachment_type'] != 'image':
+        raise ValueError('表情只支持图片格式')
+
+    emoji = UserEmoji(
+        user=user,
+        title=(title or attachment_data['attachment_name'] or '图片表情')[:60],
+        last_used_at=timezone.now(),
+    )
+    emoji.image.save(attachment_data['file'].name, attachment_data['file'], save=False)
+    emoji.save()
+    return emoji
+
+
+def clone_attachment_as_emoji(user, source_file, title=''):
+    if not source_file:
+        raise ValueError('没有可收藏的图片')
+    with source_file.open('rb') as fp:
+        copied = ContentFile(fp.read(), name=build_attachment_name(os.path.basename(source_file.name), fallback='emoji'))
+    emoji = UserEmoji(
+        user=user,
+        title=(title or os.path.basename(source_file.name) or '图片表情')[:60],
+        last_used_at=timezone.now(),
+    )
+    emoji.image.save(copied.name, copied, save=False)
+    emoji.save()
+    return emoji
+
+
+def serialize_room_message_payload(message_obj, appearance):
+    return {
+        'id': message_obj.id,
+        'message': message_obj.message,
+        'user': message_obj.username,
+        'type': message_obj.message_type,
+        'timestamp': message_obj.timestamp.isoformat() if message_obj.timestamp else None,
+        'location': message_obj.location_label,
+        'appearance': appearance,
+        'avatar_label': appearance.get('avatar_label', ''),
+        'avatar_url': appearance.get('avatar_url', ''),
+        'friend_id': appearance.get('friend_id', ''),
+        'attachment': build_attachment_payload(message_obj),
+    }
+
+
+def serialize_direct_message_payload(message_obj, appearance):
+    return {
+        'id': message_obj.id,
+        'type': 'chat',
+        'message': message_obj.content,
+        'user': message_obj.sender.username,
+        'timestamp': message_obj.created_at.isoformat() if message_obj.created_at else None,
+        'avatar_label': appearance.get('avatar_label', ''),
+        'avatar_url': appearance.get('avatar_url', ''),
+        'appearance': appearance,
+        'attachment': build_attachment_payload(message_obj),
+    }
+
+
+def build_history_entry(item, text_attr):
+    attachment = build_attachment_payload(item)
+    message_text = getattr(item, text_attr, '')
+    preview = get_message_preview_text(
+        message_text,
+        getattr(item, 'attachment_type', ''),
+        getattr(item, 'attachment_name', ''),
+        limit=80,
+    )
+    return {
+        'preview': preview,
+        'message': message_text,
+        'attachment': attachment,
+        'id': item.id,
+        'created_at': getattr(item, 'timestamp', None) or getattr(item, 'created_at', None),
+    }
+
+
+def serialize_user_emoji(item):
+    return {
+        'id': item.id,
+        'title': item.title or '图片表情',
+        'url': item.image.url,
+    }
+
+
+def get_user_emoji_queryset(user):
+    return UserEmoji.objects.filter(user=user).order_by('-last_used_at', '-created_at')[:24]
+
+
+def mark_user_emoji_used(item):
+    item.last_used_at = timezone.now()
+    item.save(update_fields=['last_used_at'])
+
+
 def are_friends(user, other_user):
     return Friendship.objects.filter(user=user, friend=other_user).exists()
 
@@ -319,7 +533,11 @@ def build_room_threads(user):
             unread_qs = unread_qs.filter(timestamp__gt=state.last_read_at)
 
         if latest_message:
-            last_message_preview = get_thread_preview_text(latest_message.message)
+            last_message_preview = get_message_preview_text(
+                latest_message.message,
+                latest_message.attachment_type,
+                latest_message.attachment_name,
+            )
             last_message_at = latest_message.timestamp
         else:
             last_message_preview = room.description or '新群聊已创建，来发第一条消息吧'
@@ -362,7 +580,11 @@ def build_direct_threads(user):
             unread_qs = unread_qs.filter(created_at__gt=state.last_read_at)
 
         if latest_message:
-            last_message_preview = get_thread_preview_text(latest_message.content)
+            last_message_preview = get_message_preview_text(
+                latest_message.content,
+                latest_message.attachment_type,
+                latest_message.attachment_name,
+            )
             last_message_at = latest_message.created_at
         else:
             last_message_preview = '还没有私聊消息，发一句试试看。'
@@ -925,6 +1147,10 @@ def room(request, room_name):
     chat_profile = get_or_create_chat_profile(request.user)
     room_membership = room_membership or get_room_membership(room, request.user)
     room_member_records = build_room_member_records(room, request.user)
+    visible_room_messages = room.messages.select_related('user', 'user__chat_profile').order_by('-timestamp')[:30]
+    room_history_info = [build_history_entry(item, 'message') for item in visible_room_messages]
+    room_history_images = [entry for entry in room_history_info if entry['attachment'] and entry['attachment']['kind'] == 'image']
+    room_history_files = [entry for entry in room_history_info if entry['attachment'] and entry['attachment']['kind'] == 'file']
     visit_state = get_or_create_room_visit_state(request.user, room)
     visit_state.last_read_at = timezone.now()
     visit_state.save(update_fields=['last_read_at'])
@@ -956,6 +1182,11 @@ def room(request, room_name):
         'chat_theme_choices': CHAT_COLOR_THEMES.items(),
         'chat_style_choices': CHAT_BUBBLE_STYLES.items(),
         'inviteable_friends': inviteable_friends,
+        'room_history_info': room_history_info,
+        'room_history_images': room_history_images,
+        'room_history_files': room_history_files,
+        'builtin_emojis': BUILTIN_EMOJIS,
+        'user_emojis': list(get_user_emoji_queryset(request.user)),
         'pending_join_requests': RoomJoinRequest.objects.filter(room=room, status=RoomJoinRequest.STATUS_PENDING).select_related('requester', 'requester__chat_profile'),
         'pending_friend_requests_count': pending_friend_requests_count,
         'inbox_badge_count': pending_friend_requests_count + get_pending_room_invites_queryset(request.user).count(),
@@ -1207,6 +1438,247 @@ def mark_direct_read(request, username):
 
 
 @login_required
+@require_POST
+def upload_room_attachment(request, room_name):
+    try:
+        room = Room.objects.get(name=room_name)
+    except Room.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'room_not_found'}, status=404)
+
+    membership = get_room_membership(room, request.user)
+    if room.created_by != request.user and not (membership and membership.is_active):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return JsonResponse({'ok': False, 'error': 'missing_file'}, status=400)
+
+    try:
+        attachment_data = prepare_chat_attachment(uploaded_file, f'{room.name}_{request.user.username}')
+    except ValueError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    profile = get_or_create_chat_profile(request.user)
+    location_label = ''
+    if profile.show_location and hasattr(request.user, 'location'):
+        location_label = request.user.location.display_label
+
+    message = Message(
+        room=room,
+        user=request.user,
+        username=request.user.username,
+        message='',
+        message_type='chat',
+        location_label=location_label,
+        attachment_type=attachment_data['attachment_type'],
+        attachment_name=attachment_data['attachment_name'],
+        attachment_mime=attachment_data['attachment_mime'],
+        attachment_size=attachment_data['attachment_size'],
+    )
+    message.attachment.save(attachment_data['file'].name, attachment_data['file'], save=False)
+    message.save()
+
+    payload = serialize_room_message_payload(message, profile.to_payload())
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        build_room_group_name(room.name),
+        {
+            'type': 'chat_message',
+            'payload': payload,
+        }
+    )
+    return JsonResponse({'ok': True, 'message': payload})
+
+
+@login_required
+@require_POST
+def upload_direct_attachment(request, username):
+    try:
+        other_user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
+
+    if other_user == request.user or not are_friends(request.user, other_user):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return JsonResponse({'ok': False, 'error': 'missing_file'}, status=400)
+
+    try:
+        attachment_data = prepare_chat_attachment(uploaded_file, f'{request.user.username}_{other_user.username}')
+    except ValueError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    conversation = get_or_create_direct_conversation(request.user, other_user)
+    DirectConversationState.objects.get_or_create(conversation=conversation, user=request.user)
+    DirectConversationState.objects.get_or_create(conversation=conversation, user=other_user)
+
+    message = DirectMessage(
+        conversation=conversation,
+        sender=request.user,
+        content='',
+        attachment_type=attachment_data['attachment_type'],
+        attachment_name=attachment_data['attachment_name'],
+        attachment_mime=attachment_data['attachment_mime'],
+        attachment_size=attachment_data['attachment_size'],
+    )
+    message.attachment.save(attachment_data['file'].name, attachment_data['file'], save=False)
+    message.save()
+
+    profile = get_or_create_chat_profile(request.user)
+    payload = serialize_direct_message_payload(message, profile.to_payload())
+    channel_layer = get_channel_layer()
+    from .consumers import DirectChatConsumer
+
+    async_to_sync(channel_layer.group_send)(
+        DirectChatConsumer.build_group_name(request.user.username, other_user.username),
+        {
+            'type': 'direct_message_event',
+            'payload': payload,
+        }
+    )
+    return JsonResponse({'ok': True, 'message': payload})
+
+
+@login_required
+@require_POST
+def upload_user_emoji(request):
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return JsonResponse({'ok': False, 'error': 'missing_file'}, status=400)
+    try:
+        emoji = create_user_emoji_from_upload(request.user, uploaded_file, request.POST.get('title', ''))
+    except ValueError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+    return JsonResponse({'ok': True, 'emoji': serialize_user_emoji(emoji)})
+
+
+@login_required
+@require_POST
+def favorite_room_image_emoji(request, room_name, message_id):
+    try:
+        room = Room.objects.get(name=room_name)
+        message = Message.objects.get(pk=message_id, room=room)
+    except (Room.DoesNotExist, Message.DoesNotExist):
+        return JsonResponse({'ok': False, 'error': 'message_not_found'}, status=404)
+
+    membership = get_room_membership(room, request.user)
+    if room.created_by != request.user and not (membership and membership.is_active):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if message.attachment_type != 'image' or not message.attachment:
+        return JsonResponse({'ok': False, 'error': 'image_only'}, status=400)
+
+    emoji = clone_attachment_as_emoji(request.user, message.attachment, message.attachment_name)
+    return JsonResponse({'ok': True, 'emoji': serialize_user_emoji(emoji)})
+
+
+@login_required
+@require_POST
+def favorite_direct_image_emoji(request, username, message_id):
+    try:
+        other_user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
+    if other_user == request.user or not are_friends(request.user, other_user):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+
+    conversation = get_or_create_direct_conversation(request.user, other_user)
+    try:
+        message = DirectMessage.objects.get(pk=message_id, conversation=conversation)
+    except DirectMessage.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'message_not_found'}, status=404)
+
+    if message.attachment_type != 'image' or not message.attachment:
+        return JsonResponse({'ok': False, 'error': 'image_only'}, status=400)
+
+    emoji = clone_attachment_as_emoji(request.user, message.attachment, message.attachment_name)
+    return JsonResponse({'ok': True, 'emoji': serialize_user_emoji(emoji)})
+
+
+@login_required
+@require_POST
+def send_room_emoji(request, room_name, emoji_id):
+    try:
+        room = Room.objects.get(name=room_name)
+        emoji = UserEmoji.objects.get(pk=emoji_id, user=request.user)
+    except (Room.DoesNotExist, UserEmoji.DoesNotExist):
+        return JsonResponse({'ok': False, 'error': 'emoji_not_found'}, status=404)
+
+    membership = get_room_membership(room, request.user)
+    if room.created_by != request.user and not (membership and membership.is_active):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+
+    mark_user_emoji_used(emoji)
+
+    profile = get_or_create_chat_profile(request.user)
+    location_label = request.user.location.display_label if profile.show_location and hasattr(request.user, 'location') else ''
+    message = Message(
+        room=room,
+        user=request.user,
+        username=request.user.username,
+        message='',
+        message_type='chat',
+        location_label=location_label,
+        attachment_type='image',
+        attachment_name=emoji.title or os.path.basename(emoji.image.name),
+        attachment_mime='image/jpeg',
+        attachment_size=emoji.image.size or 0,
+    )
+    with emoji.image.open('rb') as fp:
+        copied = ContentFile(fp.read(), name=build_attachment_name(os.path.basename(emoji.image.name), fallback='emoji'))
+    message.attachment.save(copied.name, copied, save=False)
+    message.save()
+
+    payload = serialize_room_message_payload(message, profile.to_payload())
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        build_room_group_name(room.name),
+        {'type': 'chat_message', 'payload': payload}
+    )
+    return JsonResponse({'ok': True, 'message': payload})
+
+
+@login_required
+@require_POST
+def send_direct_emoji(request, username, emoji_id):
+    try:
+        other_user = User.objects.get(username=username)
+        emoji = UserEmoji.objects.get(pk=emoji_id, user=request.user)
+    except (User.DoesNotExist, UserEmoji.DoesNotExist):
+        return JsonResponse({'ok': False, 'error': 'emoji_not_found'}, status=404)
+    if other_user == request.user or not are_friends(request.user, other_user):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+
+    mark_user_emoji_used(emoji)
+
+    conversation = get_or_create_direct_conversation(request.user, other_user)
+    message = DirectMessage(
+        conversation=conversation,
+        sender=request.user,
+        content='',
+        attachment_type='image',
+        attachment_name=emoji.title or os.path.basename(emoji.image.name),
+        attachment_mime='image/jpeg',
+        attachment_size=emoji.image.size or 0,
+    )
+    with emoji.image.open('rb') as fp:
+        copied = ContentFile(fp.read(), name=build_attachment_name(os.path.basename(emoji.image.name), fallback='emoji'))
+    message.attachment.save(copied.name, copied, save=False)
+    message.save()
+
+    profile = get_or_create_chat_profile(request.user)
+    payload = serialize_direct_message_payload(message, profile.to_payload())
+    from .consumers import DirectChatConsumer
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        DirectChatConsumer.build_group_name(request.user.username, other_user.username),
+        {'type': 'direct_message_event', 'payload': payload}
+    )
+    return JsonResponse({'ok': True, 'message': payload})
+
+
+@login_required
 def friends_view(request):
     profile = get_or_create_chat_profile(request.user)
     friends = Friendship.objects.filter(user=request.user).select_related('friend', 'friend__chat_profile')
@@ -1354,6 +1826,9 @@ def direct_chat(request, username):
 
     messages_qs = get_visible_direct_messages(conversation, state)
     messages_list = list(messages_qs)
+    direct_history_info = [build_history_entry(item, 'content') for item in reversed(messages_list[-30:])]
+    direct_history_images = [entry for entry in direct_history_info if entry['attachment'] and entry['attachment']['kind'] == 'image']
+    direct_history_files = [entry for entry in direct_history_info if entry['attachment'] and entry['attachment']['kind'] == 'file']
     for item in messages_list:
         if item.sender_id and not hasattr(item.sender, 'chat_profile'):
             get_or_create_chat_profile(item.sender)
@@ -1369,6 +1844,11 @@ def direct_chat(request, username):
         'other_profile_payload_json': mark_safe(json.dumps(other_profile.to_payload())),
         'conversation': conversation,
         'messages_list': messages_list,
+        'direct_history_info': direct_history_info,
+        'direct_history_images': direct_history_images,
+        'direct_history_files': direct_history_files,
+        'builtin_emojis': BUILTIN_EMOJIS,
+        'user_emojis': list(get_user_emoji_queryset(request.user)),
         'other_username_json': mark_safe(json.dumps(other_user.username)),
         'cleared_at': state.cleared_at,
         'pending_friend_requests_count': FriendRequest.objects.filter(

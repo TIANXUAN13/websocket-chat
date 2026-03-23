@@ -1,0 +1,203 @@
+# ==============================================
+# 基础设置
+# ==============================================
+# 数据库地址
+DB_ADDR: postgres://captain:captain@172.26.239.2:5432/captain?sslmode=disable
+# Elasticsearch 数据库地址
+ES_ADDR: http://172.26.239.3:9200/
+# Redis 地址
+REDIS_ADDR: redis://:foobar@172.26.239.4:6379
+# 服务监听地址
+HTTP_LISTEN: 0.0.0.0:8080
+# Log 记录等级
+LOG_LEVEL: info
+# 客户端 IP 来源 Header field，实际判断字段，默认取 DEFAULT_API_IP_SOURCE
+API_IP_SOURCE: X-Forwarded-For:1,IP-Source
+# Session 存储服务，目前仅支持 redis
+SESSION_STORE: redis
+# 默认后端服务语言，目前未实现根据客户选择变更，故目前该字段表示系统后端语言
+DEFAULT_LANG: zh-CN
+# Log 文件路径(为空或不设置则不写入文件)
+LOG_FILE: /app/log/captain.log
+
+
+# ==============================================
+# 集中管理平台设置
+# ==============================================
+# 任务外的 API 调用操作的超时时间(s)
+APITimeout: 5
+# 任务外的 API 调用次数
+APIRetry: 3
+TLS_PROXY: true
+# 许可证公钥文件
+LICENSE_PUBLIC_KEY_FILE: /app/asset/license/pub.key
+# 许可证 AES 文件
+LICENSE_AES_KEY_FILE: /app/asset/license/aes.key
+# 从 WAF 生成的 Enum 文件路径
+ENUM_FILE: /app/config/enum.yml
+# GEOIP IP地址查找城市数据库文件地址
+GEOIP2_FILE: /app/asset/GeoLite2-City.mmdb
+# WAF 配置备份文件储存路径
+CONFIG_DIR: /app/
+# 存储引擎更新包的临时文件目录
+TEMP_DIR: /app/temp/
+AuditArchiveDir: /app/audit_log/
+# 下载报告使用的模版文件地址
+REPORT_DOWNLOAD_TEM_FILE: /app/frontend/template/index.html
+TIME_ZONE: "Asia/Shanghai"
+RADIUS_TIMEOUT: 5
+# 日志归档任务执行间隔(s)，该值表示任务执行间隔，但该次任务执行时间与上次归档时间是否满足条件在任务中另做判断
+ARCHIVE_TASK_INTERVAL: 600
+# 日志下载管理任务执行间隔(s)，该值表示任务执行间隔
+LOG_TASK_INTERVAL: 60
+#PRC_AGENT_CONNECTION_HOST: none
+
+#日志展示上限
+MAX_WINDOW: 1000000
+
+# 同步数据 接收服务参数
+RECEIVER:
+  # 服务监听地址与端口
+  address: 0.0.0.0:1834
+  # 双向认证服务端 根证书文件路径
+  ca:
+    crt_file: /app/asset/cert/rpc/ca.pem
+  # 双向认证服务端证书文件路径
+  server:
+    crt_file: /app/asset/cert/rpc/server/server.pem
+    key_file: /app/asset/cert/server/server.key
+  # 同步数据写入 es 配置
+  es:
+    work_num: 2
+    bulk_actions: 1000
+    bulk_size: 2097152
+
+# ==============================================
+# 后台任务设置
+# ==============================================
+TASK:
+  # WAF 及其节点同步任务
+  waf:
+    interval: 600
+    worker:
+      num: 2
+      max_num: 10
+      timeout: 5
+      retry_times: 3
+
+  # WAF 攻击检测日志同步任务
+  request_log:
+    interval: 300
+    info_interval: 600
+    info_size: 2000
+    ahead: 10
+    init_sync: 30
+    max: 200
+    days: 1
+    es:
+      workers: 2
+      action: 1000
+      size: 2097152 # 2 << 20
+    worker:
+      num: 2
+      timeout: 5
+      retry_times: 3
+  # WAF bot防护日志同步任务
+  bot_log:
+    interval: 600
+    info_interval: 600
+    del_interval: 3600
+    info_size: 2000
+    ahead: 10
+    init_sync: 30
+    max: 1000
+    days: 1
+    es:
+      workers: 2
+      action: 1000
+      size: 2097152 # 2 << 20
+    worker:
+      num: 2
+      timeout: 5
+      retry_times: 3
+  # WAF 访问频率设置同步任务
+  acl_rule:
+    interval: 600
+    worker:
+      num: 2
+      timeout: 5
+      retry_times: 3
+
+  # WAF 访问频率控制日志同步任务
+  acl_rule_log:
+    interval: 600
+    ahead: 360
+    init_sync: 30
+    max: 1000
+    days: 1
+    es:
+      workers: 2
+      action: 1000
+      size: 2097152 # 2 << 20
+    worker:
+      num: 2
+      timeout: 5
+      retry_times: 3
+
+  # 自定义规则 自定义策略 站点等同步任务，对于同一 waf 这些内容会在一次同步任务中依次同步
+  website:
+    interval: 1800
+    worker:
+      num: 2
+      timeout: 5
+      retry_times: 3
+
+  # Session 缓存清理任务(min)，仅用来清理过期 session 释放内存，与实际登录控制无关
+  clear:
+    session: 60
+
+  # WAF 定时、手动报告以及纵横手动下发生成报告同步任务
+  report:
+    worker:
+      interval: 600
+      num: 2
+      timeout: 5
+      retry_times: 3
+    manual_worker:
+      interval: 60
+      num: 2
+      timeout: 5
+      retry_times: 3
+
+  # WAF 定时同步配置备份任务
+  waf_config_backup:
+    file_interval: 60
+    interval: 600
+    max: 10
+    worker:
+      num: 2
+      timeout: 5
+      retry_times: 5
+
+#  sensor:
+#    worker:
+#      interval: 60
+#      num: 2
+#      timeout: 5
+#      retry_times: 3
+#    report_worker:
+#      interval: 60
+#      num: 2
+#      timeout: 5
+#      retry_times: 3
+#    syslog_worker:
+#      interval: 60
+#      num: 2
+#      timeout: 5
+#      retry_times: 5
+#    white_list_worker:
+#      interval: 60
+#      num: 2
+#      timeout: 5
+#      retry_times: 5
+

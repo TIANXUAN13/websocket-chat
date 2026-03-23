@@ -24,15 +24,18 @@ class CheckUserSessionMiddleware:
                 return self.get_response(request)
             
             try:
-                valid_session = UserSession.objects.filter(
-                    user=request.user,
-                    session_key=current_session_key
-                ).exists()
-                
+                valid_session = UserSession.objects.filter(user=request.user, session_key=current_session_key).exists()
+
                 if not valid_session:
-                    logout(request)
-                    messages.error(request, '您的账号已在其他地方登录，请重新登录')
-                    return redirect('login')
+                    latest_user_session = UserSession.objects.filter(user=request.user).order_by('-created_at').first()
+                    if latest_user_session is None:
+                        UserSession.objects.create(user=request.user, session_key=current_session_key)
+                    elif latest_user_session.session_key == current_session_key:
+                        pass
+                    else:
+                        logout(request)
+                        messages.error(request, '您的账号已在其他地方登录，请重新登录')
+                        return redirect('login')
             except Exception:
                 # 如果查询出错，跳过检查
                 pass
