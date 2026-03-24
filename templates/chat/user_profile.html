@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ target_profile.get_display_name }} 的资料 - {{ site_title }}</title>
+    <title>{{ target_user.username }} 的资料 - {{ site_title }}</title>
     {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
     <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
     <script>
@@ -111,13 +111,13 @@
             <div class="profile-card-large">
                 <div class="avatar profile-detail-avatar{% if target_profile.avatar_image %} has-photo{% endif %}">
                     {% if target_profile.avatar_image %}
-                        <img class="avatar-photo" src="{{ target_profile.avatar_image.url }}" alt="{{ target_profile.get_display_name }} 的头像">
+                        <img class="avatar-photo" src="{{ target_profile.avatar_image.url }}" alt="{{ target_user.username }} 的头像">
                     {% else %}
                         {{ target_profile.get_avatar_label }}
                     {% endif %}
                 </div>
                 <div class="profile-detail-text">
-                    <h1>{{ target_profile.get_display_name }}</h1>
+                    <h1>{{ target_user.username }}</h1>
                     <div class="profile-meta-list">
                         <button class="copy-chip" type="button" data-copy-text="{{ target_profile.friend_id }}" data-copy-success="好友 ID 已复制" onclick="return window.codexHandleCopyClick(this)">
                             <span>好友 ID {{ target_profile.friend_id }}</span>
@@ -132,7 +132,7 @@
                         {% if is_self %}
                             <a class="btn btn-primary" href="{% url 'profile_settings' %}?next={{ request.get_full_path|urlencode }}">编辑我的设置</a>
                         {% elif is_friend %}
-                            <a class="btn btn-primary" href="{% url 'direct_chat' target_profile.public_id %}?next={{ request.get_full_path|urlencode }}">发消息</a>
+                            <a class="btn btn-primary" href="{% url 'direct_chat' target_user.username %}?next={{ request.get_full_path|urlencode }}">发消息</a>
                         {% elif incoming_request %}
                             <a class="btn btn-primary" href="{% url 'inbox' %}">去处理好友申请</a>
                         {% elif outgoing_request %}
@@ -168,7 +168,7 @@
                     <div class="quick-action-card stack">
                         <strong>你们已经是好友</strong>
                         <p>可以直接开始私聊，聊天记录会自动保存；如果需要，也能在私聊页清除自己看到的历史。</p>
-                        <a class="btn btn-primary" href="{% url 'direct_chat' target_profile.public_id %}?next={{ request.get_full_path|urlencode }}">直接聊天</a>
+                        <a class="btn btn-primary" href="{% url 'direct_chat' target_user.username %}?next={{ request.get_full_path|urlencode }}">直接聊天</a>
                     </div>
                 {% elif incoming_request %}
                     <div class="quick-action-card stack">
@@ -179,7 +179,7 @@
                 {% elif outgoing_request %}
                     <div class="quick-action-card stack">
                         <strong>好友申请已发出</strong>
-                        <p>你已经向 {{ target_profile.get_display_name }} 发送过申请，等对方在消息中心处理即可。</p>
+                        <p>你已经向 {{ target_user.username }} 发送过申请，等对方在消息中心处理即可。</p>
                         <a class="btn btn-secondary" href="{% url 'inbox' %}">查看消息中心</a>
                     </div>
                 {% else %}

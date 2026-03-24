@@ -83,13 +83,13 @@
             <div class="user-chip">
                 <div class="avatar{% if chat_profile.avatar_image %} has-photo{% endif %}">
                     {% if chat_profile.avatar_image %}
-                        <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ chat_profile.get_display_name }} 的头像">
+                        <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像">
                     {% else %}
                         {{ chat_profile.get_avatar_label }}
                     {% endif %}
                 </div>
                 <div class="brand-title">
-                    <strong>{{ chat_profile.get_display_name }}</strong>
+                    <strong>{{ user.username }}</strong>
                     <span>这些设置是你自己的，不属于某个房间。</span>
                 </div>
             </div>
@@ -116,22 +116,18 @@
             <div class="profile-preview-panel">
                 <div class="avatar profile-preview-avatar profile-preview-avatar-large{% if chat_profile.avatar_image %} has-photo{% endif %}" id="profile-preview-avatar">
                     {% if chat_profile.avatar_image %}
-                        <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ chat_profile.get_display_name }} 的头像">
+                        <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像">
                     {% else %}
                         {{ chat_profile.get_avatar_label }}
                     {% endif %}
                 </div>
                 <div class="profile-preview-copy">
-                    <strong>{{ chat_profile.get_display_name }}</strong>
+                    <strong>{{ user.username }}</strong>
                     <span>当前展示头像与昵称预览</span>
                 </div>
             </div>
 
             <div class="settings-sidebar-grid">
-                <div class="profile-hint profile-hint-compact">
-                    <strong>公开用户 ID</strong>
-                    <span>{{ chat_profile.public_id }}</span>
-                </div>
                 <div class="profile-hint profile-hint-compact">
                     <strong>当前识别位置</strong>
                     <span>{% if current_location %}{{ current_location.display_label }}{% else %}暂未识别到位置{% endif %}</span>
@@ -156,14 +152,6 @@
                     <div class="settings-section-head">
                         <strong>个人信息</strong>
                         <span>统一管理你的展示身份。</span>
-                    </div>
-                    <div class="stack">
-                        <label class="field-label" for="display_name">展示名称</label>
-                        <input class="form-input" id="display_name" name="display_name" type="text" maxlength="40" value="{{ chat_profile.display_name }}" placeholder="聊天里优先展示这个名字，支持中文">
-                    </div>
-                    <div class="stack">
-                        <label class="field-label" for="username">用户名</label>
-                        <input class="form-input" id="username" name="username" type="text" maxlength="150" value="{{ user.username }}" placeholder="登录名与历史链接识别仍使用这个字段">
                     </div>
                     <div class="stack">
                         <label class="field-label" for="friend_id">好友 ID</label>
@@ -235,13 +223,13 @@
                     <div class="profile-preview-chat" id="profile-preview-chat">
                         <div class="profile-preview-message" id="profile-preview-message">
                             <div class="profile-preview-message-head">
-                                <div class="profile-preview-message-user" id="preview-name">{{ chat_profile.get_display_name }}</div>
+                                <div class="profile-preview-message-user" id="preview-name">{{ user.username }}</div>
                                 <div class="profile-preview-message-location" id="preview-location">{% if current_location and chat_profile.show_location %}{{ current_location.display_label }}{% endif %}</div>
                             </div>
                             <div class="profile-preview-message-body">
                                 <div class="profile-preview-message-avatar{% if chat_profile.avatar_image %} has-photo{% endif %}" id="preview-avatar">
                                     {% if chat_profile.avatar_image %}
-                                        <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ chat_profile.get_display_name }} 的头像预览">
+                                        <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像预览">
                                     {% else %}
                                         {{ chat_profile.get_avatar_label }}
                                     {% endif %}
@@ -309,11 +297,8 @@
         const defaultTheme = '{{ default_chat_theme }}';
         const defaultStyle = '{{ default_chat_style }}';
         const currentLocationLabel = '{% if current_location %}{{ current_location.display_label|escapejs }}{% endif %}';
-        const originalUsername = '{{ user.username|escapejs }}';
-        const originalDisplayName = '{{ chat_profile.get_display_name|escapejs }}';
+        const username = '{{ user.username|escapejs }}';
 
-        const displayNameInput = document.getElementById('display_name');
-        const usernameInput = document.getElementById('username');
         const avatarInput = document.getElementById('avatar_label');
         const bioInput = document.getElementById('bio');
         const themeSelect = document.getElementById('color_theme');
@@ -415,14 +400,13 @@
 
         function buildAvatarLabel(rawValue) {
             const trimmed = (rawValue || '').trim();
-            const currentDisplayName = (displayNameInput?.value || usernameInput?.value || originalDisplayName || originalUsername || '').trim() || originalDisplayName || originalUsername;
             if (trimmed) {
                 return trimmed.slice(0, 6);
             }
-            if (/[\u4e00-\u9fff]/.test(currentDisplayName)) {
-                return currentDisplayName.slice(0, 2);
+            if (/[\u4e00-\u9fff]/.test(username)) {
+                return username.slice(0, 2);
             }
-            return currentDisplayName.slice(0, 2).toUpperCase();
+            return username.slice(0, 2).toUpperCase();
         }
 
         function updateProfilePreview() {
@@ -430,10 +414,9 @@
             const style = styleMap[styleSelect.value] || styleMap[defaultStyle];
             const avatarLabel = buildAvatarLabel(avatarInput.value);
             const bioText = (bioInput.value || '').trim() || '你好呀，这里会显示你当前设置下的聊天预览。';
-            const currentDisplayName = (displayNameInput?.value || usernameInput?.value || originalDisplayName || originalUsername || '').trim() || originalDisplayName || originalUsername;
 
             previewAvatar.textContent = avatarLabel;
-            previewName.textContent = currentDisplayName;
+            previewName.textContent = username;
             previewBio.textContent = bioText;
             previewLocation.textContent = showLocationInput.checked ? currentLocationLabel : '';
             previewLocation.hidden = !showLocationInput.checked || !currentLocationLabel;
@@ -482,7 +465,7 @@
             setAvatarPreview(previewAvatar, currentAvatarUrl, avatarLabel);
         }
 
-        [displayNameInput, usernameInput, avatarInput, bioInput, themeSelect, styleSelect, showLocationInput].forEach((field) => {
+        [avatarInput, bioInput, themeSelect, styleSelect, showLocationInput].forEach((field) => {
             field.addEventListener('input', updateProfilePreview);
             field.addEventListener('change', updateProfilePreview);
         });

@@ -10,8 +10,6 @@ from urllib.parse import quote, urlencode
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from PIL import Image, ImageOps
-from django import forms
-from django.conf import settings
 from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.contrib.auth import login, logout, update_session_auth_hash
@@ -35,13 +33,7 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError
 from django.db.utils import OperationalError, ProgrammingError
 from django.db.models import Q
-from .forms import (
-    AdminUserPasswordForm,
-    ProfilePasswordChangeForm,
-    RegistrationForm,
-    SiteConfigurationForm,
-    validate_username_value,
-)
+from .forms import AdminUserPasswordForm, ProfilePasswordChangeForm, RegistrationForm, SiteConfigurationForm
 from .models import (
     DirectConversation,
     DirectConversationState,
@@ -57,7 +49,6 @@ from .models import (
     UserEmoji,
     RoomVisitState,
     UserChatProfile,
-    UsernameAlias,
     UserSession,
 )
 from .presets import CHAT_BUBBLE_STYLES, CHAT_COLOR_THEMES, DEFAULT_CHAT_STYLE, DEFAULT_CHAT_THEME
@@ -67,7 +58,7 @@ from .services.geoip_service import GeoIPService
 DEFAULT_ROOM_AVATARS = ['💬', '🐱', '🐶', '🐻', '🎮', '📚', '☕', '🌙', '🎵', '🍀']
 MAX_AVATAR_BYTES = 1024 * 1024
 MAX_AVATAR_DIMENSION = 720
-MAX_CHAT_ATTACHMENT_BYTES = getattr(settings, 'CHAT_ATTACHMENT_MAX_BYTES', 50 * 1024 * 1024)
+MAX_CHAT_ATTACHMENT_BYTES = 12 * 1024 * 1024
 MAX_CHAT_ATTACHMENT_IMAGE_DIMENSION = 1920
 MAX_ROOM_ADMIN_COUNT = 10
 BUILTIN_EMOJIS = ['😀', '😂', '🥹', '😎', '🥳', '🤔', '😭', '😡', '🥰', '👍', '🙏', '🎉']
@@ -76,13 +67,6 @@ QUOTED_MESSAGE_PATTERN = re.compile(r'^\[\[quote\|([^|\]]*)\|([^|\]]*)\|([^|\]]*
 
 def build_room_group_name(room_name):
     return f"chat_{hashlib.sha256(room_name.encode('utf-8')).hexdigest()[:32]}"
-
-
-def get_chat_attachment_limit_bytes():
-    site_config = SiteConfiguration.get_solo()
-    if site_config is not None:
-        return site_config.chat_attachment_max_bytes
-    return MAX_CHAT_ATTACHMENT_BYTES
 
 
 def get_safe_next_url(request, fallback_name='chat_index'):
@@ -139,83 +123,6 @@ def get_direct_hub_url(username):
     return f"{reverse('chat_index')}?{urlencode({'thread_type': 'direct', 'target': username})}"
 
 
-def resolve_user_by_public_id(public_id):
-    profile = UserChatProfile.objects.filter(public_id=public_id).select_related('user').first()
-    if not profile:
-        raise User.DoesNotExist
-    return profile.user
-
-
-def resolve_user_by_username(username):
-    try:
-        return User.objects.get(username=username), False
-    except User.DoesNotExist:
-        alias = UsernameAlias.objects.filter(username__iexact=username).select_related('user').first()
-        if alias:
-            return alias.user, True
-        raise
-
-
-def build_canonical_username_redirect(request, view_name, canonical_username, **kwargs):
-    route_kwargs = {'username': canonical_username}
-    route_kwargs.update(kwargs)
-    target_url = reverse(view_name, kwargs=route_kwargs)
-    query_string = request.META.get('QUERY_STRING', '')
-    if query_string:
-        target_url = f'{target_url}?{query_string}'
-    return redirect(target_url)
-
-
-def build_canonical_public_id_redirect(request, view_name, canonical_public_id, **kwargs):
-    route_kwargs = {'public_id': canonical_public_id}
-    route_kwargs.update(kwargs)
-    target_url = reverse(view_name, kwargs=route_kwargs)
-    query_string = request.META.get('QUERY_STRING', '')
-    if query_string:
-        target_url = f'{target_url}?{query_string}'
-    return redirect(target_url)
-
-
-def get_user_profile_url(user):
-    profile = get_or_create_chat_profile(user)
-    return reverse('user_profile', kwargs={'public_id': profile.public_id})
-
-
-def get_direct_chat_url(user):
-    profile = get_or_create_chat_profile(user)
-    return reverse('direct_chat', kwargs={'public_id': profile.public_id})
-
-
-def get_direct_attachment_url(user):
-    profile = get_or_create_chat_profile(user)
-    return reverse('upload_direct_attachment', kwargs={'public_id': profile.public_id})
-
-
-def get_direct_read_url(user):
-    profile = get_or_create_chat_profile(user)
-    return reverse('mark_direct_read', kwargs={'public_id': profile.public_id})
-
-
-def get_direct_delete_url(user):
-    profile = get_or_create_chat_profile(user)
-    return reverse('delete_direct_conversation', kwargs={'public_id': profile.public_id})
-
-
-def get_direct_emoji_send_url(user, emoji_id):
-    profile = get_or_create_chat_profile(user)
-    return reverse('send_direct_emoji', kwargs={'public_id': profile.public_id, 'emoji_id': emoji_id})
-
-
-def get_direct_emoji_favorite_url(user, message_id):
-    profile = get_or_create_chat_profile(user)
-    return reverse('favorite_direct_image_emoji', kwargs={'public_id': profile.public_id, 'message_id': message_id})
-
-
-def get_remove_friend_url(user):
-    profile = get_or_create_chat_profile(user)
-    return reverse('remove_friend', kwargs={'public_id': profile.public_id})
-
-
 ADMIN_PAGE_SIZE_OPTIONS = (10, 20, 50, 100)
 
 
@@ -265,8 +172,6 @@ def get_or_create_chat_profile(user):
     profile, _ = UserChatProfile.objects.get_or_create(
         user=user,
         defaults={
-            'public_id': UserChatProfile.generate_unique_public_id(exclude_user_id=user.id),
-            'display_name': user.username,
             'friend_id': UserChatProfile.generate_unique_friend_id(user.username, exclude_user_id=user.id),
             'avatar_label': '',
             'color_theme': DEFAULT_CHAT_THEME,
@@ -274,18 +179,9 @@ def get_or_create_chat_profile(user):
             'show_location': True,
         },
     )
-    update_fields = []
-    if not profile.public_id:
-        profile.public_id = UserChatProfile.generate_unique_public_id(exclude_user_id=user.id)
-        update_fields.append('public_id')
-    if not profile.display_name:
-        profile.display_name = user.username
-        update_fields.append('display_name')
     if not profile.friend_id:
         profile.friend_id = UserChatProfile.generate_unique_friend_id(user.username, exclude_user_id=user.id)
-        update_fields.append('friend_id')
-    if update_fields:
-        profile.save(update_fields=update_fields)
+        profile.save(update_fields=['friend_id'])
     return profile
 
 
@@ -358,9 +254,8 @@ def optimize_chat_image_upload(uploaded_file, base_name):
         buffer = io.BytesIO()
         working_image.save(buffer, format='JPEG', quality=quality, optimize=True, progressive=True)
         content = buffer.getvalue()
-        attachment_limit_bytes = get_chat_attachment_limit_bytes()
-        if len(content) <= attachment_limit_bytes or quality <= 48:
-            if len(content) <= attachment_limit_bytes:
+        if len(content) <= MAX_CHAT_ATTACHMENT_BYTES or quality <= 48:
+            if len(content) <= MAX_CHAT_ATTACHMENT_BYTES:
                 break
 
             resized_width = max(320, int(working_image.width * 0.9))
@@ -392,9 +287,8 @@ def prepare_chat_attachment(uploaded_file, base_name):
     original_name = (getattr(uploaded_file, 'name', '') or base_name or 'file').strip() or 'file'
     size = getattr(uploaded_file, 'size', 0) or 0
 
-    attachment_limit_bytes = get_chat_attachment_limit_bytes()
-    if size > attachment_limit_bytes:
-        raise ValueError(f'附件不能超过 {max(1, attachment_limit_bytes // (1024 * 1024))}MB')
+    if size > MAX_CHAT_ATTACHMENT_BYTES:
+        raise ValueError('附件不能超过 12MB')
 
     if content_type.startswith('image/'):
         optimized = optimize_chat_image_upload(uploaded_file, base_name)
@@ -468,8 +362,6 @@ def serialize_room_message_payload(message_obj, appearance):
         'id': message_obj.id,
         'message': message_obj.message,
         'user': message_obj.username,
-        'public_id': appearance.get('public_id', ''),
-        'display_name': appearance.get('display_name', message_obj.username),
         'type': message_obj.message_type,
         'timestamp': message_obj.timestamp.isoformat() if message_obj.timestamp else None,
         'location': message_obj.location_label,
@@ -487,8 +379,6 @@ def serialize_direct_message_payload(message_obj, appearance):
         'type': 'chat',
         'message': message_obj.content,
         'user': message_obj.sender.username,
-        'public_id': appearance.get('public_id', ''),
-        'display_name': appearance.get('display_name', message_obj.sender.username),
         'timestamp': message_obj.created_at.isoformat() if message_obj.created_at else None,
         'avatar_label': appearance.get('avatar_label', ''),
         'avatar_url': appearance.get('avatar_url', ''),
@@ -500,17 +390,6 @@ def serialize_direct_message_payload(message_obj, appearance):
 def build_history_entry(item, text_attr):
     attachment = build_attachment_payload(item)
     message_text = getattr(item, text_attr, '')
-    sender = getattr(item, 'user', None) or getattr(item, 'sender', None)
-    sender_profile = getattr(sender, 'chat_profile', None) if sender else None
-    sender_name = ''
-    sender_public_id = ''
-    if sender_profile:
-        sender_name = sender_profile.get_display_name()
-        sender_public_id = sender_profile.public_id
-    elif sender is not None:
-        sender_name = getattr(sender, 'username', '') or getattr(item, 'username', '')
-    else:
-        sender_name = getattr(item, 'username', '')
     preview = get_message_preview_text(
         message_text,
         getattr(item, 'attachment_type', ''),
@@ -522,8 +401,6 @@ def build_history_entry(item, text_attr):
         'message': message_text,
         'attachment': attachment,
         'id': item.id,
-        'sender_name': sender_name or '用户',
-        'sender_public_id': sender_public_id,
         'created_at': getattr(item, 'timestamp', None) or getattr(item, 'created_at', None),
     }
 
@@ -534,52 +411,6 @@ def serialize_user_emoji(item):
         'title': item.title or '图片表情',
         'url': item.image.url,
     }
-
-
-def serialize_history_browser_items(history_info, history_images, history_files):
-    items = []
-    for entry in history_info:
-        items.append({
-            'category': 'messages',
-            'title': entry.get('preview') or '空消息',
-            'subtitle': entry.get('sender_name') or '用户',
-            'timestamp': timezone.localtime(entry['created_at']).strftime('%m-%d %H:%M') if entry.get('created_at') else '',
-            'url': '',
-            'thumbnail_url': '',
-            'search_text': ' '.join(filter(None, [entry.get('sender_name', ''), entry.get('preview', ''), entry.get('message', '')])),
-        })
-    for entry in history_images:
-        attachment = entry.get('attachment') or {}
-        items.append({
-            'category': 'images',
-            'title': attachment.get('name') or '聊天图片',
-            'subtitle': entry.get('sender_name') or '用户',
-            'timestamp': timezone.localtime(entry['created_at']).strftime('%m-%d %H:%M') if entry.get('created_at') else '',
-            'url': attachment.get('url') or '',
-            'thumbnail_url': attachment.get('url') or '',
-            'search_text': ' '.join(filter(None, [entry.get('sender_name', ''), attachment.get('name', ''), entry.get('message', '')])),
-        })
-    for entry in history_files:
-        attachment = entry.get('attachment') or {}
-        items.append({
-            'category': 'files',
-            'title': attachment.get('name') or '聊天文件',
-            'subtitle': entry.get('sender_name') or '用户',
-            'timestamp': timezone.localtime(entry['created_at']).strftime('%m-%d %H:%M') if entry.get('created_at') else '',
-            'url': attachment.get('url') or '',
-            'thumbnail_url': '',
-            'search_text': ' '.join(filter(None, [entry.get('sender_name', ''), attachment.get('name', ''), entry.get('message', '')])),
-        })
-    return items
-
-
-def build_room_history_page_url(room):
-    return reverse('room_history', kwargs={'room_name': room.name})
-
-
-def build_direct_history_page_url(user):
-    profile = get_or_create_chat_profile(user)
-    return reverse('direct_history', kwargs={'public_id': profile.public_id})
 
 
 def get_user_emoji_queryset(user):
@@ -762,16 +593,13 @@ def build_direct_threads(user):
         threads.append({
             'type': 'direct',
             'name': other_user.username,
-            'target': getattr(getattr(other_user, 'chat_profile', None), 'public_id', ''),
-            'public_id': getattr(getattr(other_user, 'chat_profile', None), 'public_id', ''),
-            'display_name': getattr(getattr(other_user, 'chat_profile', None), 'get_display_name', lambda: other_user.username)(),
             'friend_id': getattr(getattr(other_user, 'chat_profile', None), 'friend_id', ''),
             'avatar_label': getattr(getattr(other_user, 'chat_profile', None), 'get_avatar_label', lambda: other_user.username[:2].upper())(),
             'avatar_url': getattr(getattr(other_user, 'chat_profile', None), 'avatar_url', ''),
-            'url': get_direct_chat_url(other_user),
-            'embed_url': f"{get_direct_chat_url(other_user)}?embed=1&v={embed_version}",
-            'inbox_url': f"{reverse('inbox')}?thread_type=direct&target={quote(getattr(getattr(other_user, 'chat_profile', None), 'public_id', ''))}",
-            'delete_url': get_direct_delete_url(other_user),
+            'url': reverse('direct_chat', args=[other_user.username]),
+            'embed_url': f"{reverse('direct_chat', args=[other_user.username])}?embed=1&v={embed_version}",
+            'inbox_url': f"{reverse('inbox')}?thread_type=direct&target={quote(other_user.username)}",
+            'delete_url': reverse('delete_direct_conversation', args=[other_user.username]),
             'unread_count': unread_qs.count(),
             'last_message_preview': last_message_preview,
             'last_message_at': last_message_at,
@@ -804,13 +632,13 @@ def build_room_placeholder_thread(user, room_name):
     }
 
 
-def build_direct_placeholder_thread(user, target):
-    if not user or not user.is_authenticated or not target:
+def build_direct_placeholder_thread(user, username):
+    if not user or not user.is_authenticated or not username:
         return None
 
     friendship = Friendship.objects.filter(
         user=user,
-        friend__chat_profile__public_id=target,
+        friend__username=username,
     ).select_related('friend', 'friend__chat_profile').first()
     if not friendship:
         return None
@@ -821,16 +649,13 @@ def build_direct_placeholder_thread(user, target):
     return {
         'type': 'direct',
         'name': other_user.username,
-        'target': getattr(profile, 'public_id', ''),
-        'public_id': getattr(profile, 'public_id', ''),
-        'display_name': getattr(profile, 'get_display_name', lambda: other_user.username)(),
         'friend_id': getattr(profile, 'friend_id', ''),
         'avatar_label': getattr(profile, 'get_avatar_label', lambda: other_user.username[:2].upper())(),
         'avatar_url': getattr(profile, 'avatar_url', ''),
-        'url': get_direct_chat_url(other_user),
-        'embed_url': f"{get_direct_chat_url(other_user)}?embed=1&v={embed_version}",
-        'inbox_url': f"{reverse('inbox')}?thread_type=direct&target={quote(getattr(profile, 'public_id', ''))}",
-        'delete_url': get_direct_delete_url(other_user),
+        'url': reverse('direct_chat', args=[other_user.username]),
+        'embed_url': f"{reverse('direct_chat', args=[other_user.username])}?embed=1&v={embed_version}",
+        'inbox_url': f"{reverse('inbox')}?thread_type=direct&target={quote(other_user.username)}",
+        'delete_url': reverse('delete_direct_conversation', args=[other_user.username]),
         'unread_count': 0,
         'last_message_preview': '还没有私聊消息，发一句试试看。',
         'last_message_at': None,
@@ -893,8 +718,6 @@ def build_room_member_records(room, current_user):
             profile = get_or_create_chat_profile(linked_user)
             member_records.append({
                 'username': linked_user.username,
-                'display_name': profile.get_display_name(),
-                'public_id': profile.public_id,
                 'avatar_label': profile.get_avatar_label(),
                 'avatar_url': profile.avatar_url,
                 'friend_id': profile.friend_id,
@@ -919,8 +742,6 @@ def build_room_member_records(room, current_user):
             profile = get_or_create_chat_profile(linked_user) if linked_user else None
             member_records.append({
                 'username': username,
-                'display_name': profile.get_display_name() if profile else username,
-                'public_id': profile.public_id if profile else '',
                 'avatar_label': profile.get_avatar_label() if profile else username[:2],
                 'avatar_url': profile.avatar_url if profile else '',
                 'friend_id': profile.friend_id if profile else '',
@@ -1092,7 +913,7 @@ def index(request):
     ).select_related('sender', 'sender__chat_profile')[:5]
     inbox_context = get_inbox_context(request.user)
     room_unread_map = {item['name']: item['unread_count'] for item in inbox_context['room_threads']}
-    direct_unread_map = {item.get('target') or item['name']: item['unread_count'] for item in inbox_context['direct_threads']}
+    direct_unread_map = {item['name']: item['unread_count'] for item in inbox_context['direct_threads']}
     room_items = [
         {
             'room': room,
@@ -1105,8 +926,8 @@ def index(request):
     friend_items = [
         {
             'friendship': item,
-            'unread_count': direct_unread_map.get(item.friend.chat_profile.public_id, 0),
-            'inbox_url': next((thread['inbox_url'] for thread in inbox_context['direct_threads'] if (thread.get('target') or thread['name']) == item.friend.chat_profile.public_id), reverse('inbox')),
+            'unread_count': direct_unread_map.get(item.friend.username, 0),
+            'inbox_url': next((thread['inbox_url'] for thread in inbox_context['direct_threads'] if thread['name'] == item.friend.username), reverse('inbox')),
         }
         for item in friends
     ]
@@ -1117,7 +938,7 @@ def index(request):
         active_thread = next(
             (
                 item for item in inbox_context['conversation_threads']
-                if item['type'] == active_type and (item.get('target') or item['name']) == active_target
+                if item['type'] == active_type and item['name'] == active_target
             ),
             None,
         )
@@ -1143,7 +964,6 @@ def index(request):
         'friends_count': friends.count(),
         'conversation_threads': inbox_context['conversation_threads'],
         'active_thread': active_thread,
-        'active_target': active_target,
     })
 
 
@@ -1192,8 +1012,7 @@ def room(request, room_name):
         messages.error(request, '房间不存在')
         return redirect('chat_index')
 
-    has_membership_record = bool(room_membership)
-    if not is_owner and not has_membership_record:
+    if not is_owner and not (room_membership and room_membership.is_active):
         messages.error(request, '你还不是这个群聊的成员，暂时不能查看群内容')
         return redirect('chat_index')
 
@@ -1366,9 +1185,6 @@ def room(request, room_name):
         'room_history_info': room_history_info,
         'room_history_images': room_history_images,
         'room_history_files': room_history_files,
-        'room_history_browser_json': mark_safe(json.dumps(
-            serialize_history_browser_items(room_history_info, room_history_images, room_history_files)
-        )),
         'builtin_emojis': BUILTIN_EMOJIS,
         'user_emojis': list(get_user_emoji_queryset(request.user)),
         'pending_join_requests': RoomJoinRequest.objects.filter(room=room, status=RoomJoinRequest.STATUS_PENDING).select_related('requester', 'requester__chat_profile'),
@@ -1376,61 +1192,6 @@ def room(request, room_name):
         'inbox_badge_count': pending_friend_requests_count + get_pending_room_invites_queryset(request.user).count(),
         'embed_mode': embed_mode,
         'user_profile_next_url': user_profile_next_url,
-        'room_history_url': build_room_history_page_url(room),
-    })
-
-
-@login_required
-@xframe_options_sameorigin
-def room_history(request, room_name):
-    embed_mode = request.GET.get('embed') == '1'
-    try:
-        room = Room.objects.get(name=room_name)
-        room_membership = get_room_membership(room, request.user)
-        is_owner = room.created_by == request.user
-    except Room.DoesNotExist:
-        room = None
-        room_membership = None
-        is_owner = False
-
-    if not room:
-        messages.error(request, '房间不存在')
-        return redirect('chat_index')
-
-    if not is_owner and not room_membership:
-        messages.error(request, '你还不是这个群聊的成员，暂时不能查看群内容')
-        return redirect('chat_index')
-
-    chat_profile = get_or_create_chat_profile(request.user)
-    visible_room_messages = list(
-        room.messages.select_related('user', 'user__chat_profile').order_by('-timestamp')
-    )
-    history_info = [build_history_entry(item, 'message') for item in visible_room_messages]
-    history_images = [entry for entry in history_info if entry['attachment'] and entry['attachment']['kind'] == 'image']
-    history_files = [entry for entry in history_info if entry['attachment'] and entry['attachment']['kind'] == 'file']
-    next_url = get_safe_next_url(request, fallback_name='chat_index')
-    if next_url == reverse('chat_index'):
-        next_url = reverse('chat_room', args=[room.name])
-
-    return render(request, 'chat/history_browser.html', {
-        'chat_profile': chat_profile,
-        'history_title': f'{room.name} 的聊天记录',
-        'history_description': '群聊消息、图片和文件都会集中在这里，支持搜索、分页和看图浏览。',
-        'history_scope_label': '群聊记录',
-        'history_target_name': room.name,
-        'history_items_json': mark_safe(json.dumps(
-            serialize_history_browser_items(history_info, history_images, history_files)
-        )),
-        'history_back_url': next_url,
-        'history_back_label': '返回群聊',
-        'history_avatar_label': room.avatar,
-        'history_avatar_url': room.avatar_url,
-        'history_meta': f'群 ID {room.room_id}',
-        'embed_mode': embed_mode,
-        'pending_friend_requests_count': FriendRequest.objects.filter(
-            recipient=request.user,
-            status=FriendRequest.STATUS_PENDING,
-        ).count(),
     })
 
 
@@ -1457,15 +1218,6 @@ def profile_settings(request):
                 return redirect('profile_settings')
             messages.error(request, '密码修改失败，请检查输入内容')
         else:
-            try:
-                normalized_username = validate_username_value(
-                    request.POST.get('username', ''),
-                    exclude_user_id=request.user.id,
-                )
-            except forms.ValidationError as exc:
-                messages.error(request, exc.messages[0])
-                return redirect(profile_settings_url)
-
             requested_friend_id = request.POST.get('friend_id', '').strip().lower()
             if requested_friend_id and UserChatProfile.objects.exclude(user=request.user).filter(friend_id=requested_friend_id).exists():
                 messages.error(request, '这个好友 ID 已经被别人使用了')
@@ -1478,24 +1230,10 @@ def profile_settings(request):
                 messages.error(request, '好友 ID 只能包含小写字母、数字或下划线')
                 return redirect(profile_settings_url)
 
-            old_username = request.user.username
-            username_changed = normalized_username != old_username
-
-            request.user.username = normalized_username
-            request.user.save(update_fields=['username'])
-
-            if username_changed:
-                UsernameAlias.objects.update_or_create(
-                    user=request.user,
-                    username=old_username,
-                )
-                Message.objects.filter(user=request.user).update(username=normalized_username)
-
             chat_profile.friend_id = requested_friend_id or UserChatProfile.generate_unique_friend_id(
-                normalized_username,
+                request.user.username,
                 exclude_user_id=request.user.id,
             )
-            chat_profile.display_name = request.POST.get('display_name', '').strip()[:40]
             chat_profile.avatar_label = request.POST.get('avatar_label', '').strip()[:24]
             chat_profile.bio = request.POST.get('bio', '').strip()[:160]
             color_theme = request.POST.get('color_theme', DEFAULT_CHAT_THEME).strip()
@@ -1505,7 +1243,7 @@ def profile_settings(request):
             chat_profile.show_location = request.POST.get('show_location') == 'on'
             remove_avatar_image = request.POST.get('remove_avatar_image') == 'on'
             uploaded_avatar = request.FILES.get('avatar_image')
-            update_fields = ['friend_id', 'display_name', 'avatar_label', 'bio', 'color_theme', 'bubble_style', 'show_location']
+            update_fields = ['friend_id', 'avatar_label', 'bio', 'color_theme', 'bubble_style', 'show_location']
 
             if remove_avatar_image and chat_profile.avatar_image:
                 chat_profile.delete_avatar_image_file()
@@ -1514,7 +1252,7 @@ def profile_settings(request):
 
             if uploaded_avatar:
                 try:
-                    optimized_avatar = compress_avatar_upload(uploaded_avatar, normalized_username)
+                    optimized_avatar = compress_avatar_upload(uploaded_avatar, request.user.username)
                 except ValueError as exc:
                     messages.error(request, str(exc))
                     return redirect(profile_settings_url)
@@ -1526,10 +1264,7 @@ def profile_settings(request):
                     update_fields.append('avatar_image')
 
             chat_profile.save(update_fields=update_fields)
-            if username_changed:
-                messages.success(request, '个人聊天设置已更新，用户名也已同步修改')
-            else:
-                messages.success(request, '个人聊天设置已更新')
+            messages.success(request, '个人聊天设置已更新')
             return redirect('profile_settings')
 
     return render(request, 'chat/profile.html', {
@@ -1632,9 +1367,6 @@ def inbox_summary(request):
             {
                 'type': item['type'],
                 'name': item['name'],
-                'target': item.get('target') or item['name'],
-                'public_id': item.get('public_id', ''),
-                'display_name': item.get('display_name', item['name']),
                 'url': item['url'],
                 'embed_url': item['embed_url'],
                 'delete_url': item['delete_url'],
@@ -1691,9 +1423,9 @@ def delete_room_conversation(request, room_name):
 
 @login_required
 @require_POST
-def mark_direct_read(request, public_id):
+def mark_direct_read(request, username):
     try:
-        other_user = resolve_user_by_public_id(public_id)
+        other_user = User.objects.get(username=username)
     except User.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
 
@@ -1760,9 +1492,9 @@ def upload_room_attachment(request, room_name):
 
 @login_required
 @require_POST
-def upload_direct_attachment(request, public_id):
+def upload_direct_attachment(request, username):
     try:
-        other_user = resolve_user_by_public_id(public_id)
+        other_user = User.objects.get(username=username)
     except User.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
 
@@ -1800,7 +1532,7 @@ def upload_direct_attachment(request, public_id):
     from .consumers import DirectChatConsumer
 
     async_to_sync(channel_layer.group_send)(
-        DirectChatConsumer.build_group_name(request.user.id, other_user.id),
+        DirectChatConsumer.build_group_name(request.user.username, other_user.username),
         {
             'type': 'direct_message_event',
             'payload': payload,
@@ -1843,9 +1575,9 @@ def favorite_room_image_emoji(request, room_name, message_id):
 
 @login_required
 @require_POST
-def favorite_direct_image_emoji(request, public_id, message_id):
+def favorite_direct_image_emoji(request, username, message_id):
     try:
-        other_user = resolve_user_by_public_id(public_id)
+        other_user = User.objects.get(username=username)
     except User.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
     if other_user == request.user or not are_friends(request.user, other_user):
@@ -1909,9 +1641,9 @@ def send_room_emoji(request, room_name, emoji_id):
 
 @login_required
 @require_POST
-def send_direct_emoji(request, public_id, emoji_id):
+def send_direct_emoji(request, username, emoji_id):
     try:
-        other_user = resolve_user_by_public_id(public_id)
+        other_user = User.objects.get(username=username)
         emoji = UserEmoji.objects.get(pk=emoji_id, user=request.user)
     except (User.DoesNotExist, UserEmoji.DoesNotExist):
         return JsonResponse({'ok': False, 'error': 'emoji_not_found'}, status=404)
@@ -1940,7 +1672,7 @@ def send_direct_emoji(request, public_id, emoji_id):
     from .consumers import DirectChatConsumer
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
-        DirectChatConsumer.build_group_name(request.user.id, other_user.id),
+        DirectChatConsumer.build_group_name(request.user.username, other_user.username),
         {'type': 'direct_message_event', 'payload': payload}
     )
     return JsonResponse({'ok': True, 'message': payload})
@@ -1984,9 +1716,9 @@ def moments_view(request):
 
 @login_required
 @require_POST
-def remove_friend(request, public_id):
+def remove_friend(request, username):
     try:
-        other_user = resolve_user_by_public_id(public_id)
+        other_user = User.objects.get(username=username)
     except User.DoesNotExist:
         messages.error(request, '用户不存在')
         return redirect('friends')
@@ -2007,9 +1739,9 @@ def remove_friend(request, public_id):
 
 
 @login_required
-def user_profile(request, public_id):
+def user_profile(request, username):
     try:
-        target_user = resolve_user_by_public_id(public_id)
+        target_user = User.objects.get(username=username)
     except User.DoesNotExist:
         messages.error(request, '用户不存在')
         return redirect('chat_index')
@@ -2052,9 +1784,9 @@ def user_profile(request, public_id):
 
 @login_required
 @xframe_options_sameorigin
-def direct_chat(request, public_id):
+def direct_chat(request, username):
     try:
-        other_user = resolve_user_by_public_id(public_id)
+        other_user = User.objects.get(username=username)
     except User.DoesNotExist:
         messages.error(request, '用户不存在')
         return redirect('chat_index')
@@ -2065,7 +1797,7 @@ def direct_chat(request, public_id):
 
     if not are_friends(request.user, other_user):
         messages.error(request, '你们还不是好友，暂时不能私聊')
-        return redirect(get_user_profile_url(other_user))
+        return redirect('user_profile', username=other_user.username)
 
     conversation = get_or_create_direct_conversation(request.user, other_user)
     state, _ = DirectConversationState.objects.get_or_create(conversation=conversation, user=request.user)
@@ -2085,12 +1817,12 @@ def direct_chat(request, public_id):
             state.cleared_at = timezone.now()
             state.save(update_fields=['cleared_at'])
             messages.success(request, '已清空你这边看到的私聊历史')
-            return redirect(f"{get_direct_chat_url(other_user)}?next={quote(next_url)}")
+            return redirect(f"{reverse('direct_chat', args=[other_user.username])}?next={quote(next_url)}")
 
         content = request.POST.get('content', '').strip()
         if content:
             DirectMessage.objects.create(conversation=conversation, sender=request.user, content=content)
-            return redirect(f"{get_direct_chat_url(other_user)}?next={quote(next_url)}")
+            return redirect(f"{reverse('direct_chat', args=[other_user.username])}?next={quote(next_url)}")
 
     messages_qs = get_visible_direct_messages(conversation, state)
     messages_list = list(messages_qs)
@@ -2115,13 +1847,9 @@ def direct_chat(request, public_id):
         'direct_history_info': direct_history_info,
         'direct_history_images': direct_history_images,
         'direct_history_files': direct_history_files,
-        'direct_history_browser_json': mark_safe(json.dumps(
-            serialize_history_browser_items(direct_history_info, direct_history_images, direct_history_files)
-        )),
         'builtin_emojis': BUILTIN_EMOJIS,
         'user_emojis': list(get_user_emoji_queryset(request.user)),
         'other_username_json': mark_safe(json.dumps(other_user.username)),
-        'other_public_id': other_profile.public_id,
         'cleared_at': state.cleared_at,
         'pending_friend_requests_count': FriendRequest.objects.filter(
             recipient=request.user,
@@ -2131,74 +1859,14 @@ def direct_chat(request, public_id):
         'embed_mode': embed_mode,
         'next_url': next_url,
         'direct_hub_url': direct_hub_url,
-        'direct_history_url': build_direct_history_page_url(other_user),
-    })
-
-
-@login_required
-@xframe_options_sameorigin
-def direct_history(request, public_id):
-    embed_mode = request.GET.get('embed') == '1'
-    try:
-        other_user = resolve_user_by_public_id(public_id)
-    except User.DoesNotExist:
-        messages.error(request, '用户不存在')
-        return redirect('chat_index')
-
-    if other_user == request.user:
-        messages.info(request, '不能查看和自己的私聊历史')
-        return redirect('chat_index')
-
-    if not are_friends(request.user, other_user):
-        messages.error(request, '你们还不是好友，暂时不能查看私聊历史')
-        return redirect(get_user_profile_url(other_user))
-
-    conversation = get_or_create_direct_conversation(request.user, other_user)
-    state, _ = DirectConversationState.objects.get_or_create(conversation=conversation, user=request.user)
-    state.deleted_at = None
-    state.last_read_at = timezone.now()
-    state.save(update_fields=['deleted_at', 'last_read_at'])
-
-    own_profile = get_or_create_chat_profile(request.user)
-    other_profile = get_or_create_chat_profile(other_user)
-    messages_list = list(get_visible_direct_messages(conversation, state))
-    for item in messages_list:
-        if item.sender_id and not hasattr(item.sender, 'chat_profile'):
-            get_or_create_chat_profile(item.sender)
-
-    history_info = [build_history_entry(item, 'content') for item in reversed(messages_list)]
-    history_images = [entry for entry in history_info if entry['attachment'] and entry['attachment']['kind'] == 'image']
-    history_files = [entry for entry in history_info if entry['attachment'] and entry['attachment']['kind'] == 'file']
-    history_browser_items = serialize_history_browser_items(history_info, history_images, history_files)
-    next_url = get_safe_next_url(request, fallback_name='chat_index')
-    if next_url == reverse('chat_index'):
-        next_url = get_direct_chat_url(other_user)
-
-    return render(request, 'chat/history_browser.html', {
-        'chat_profile': own_profile,
-        'history_title': f'与 {other_profile.get_display_name()} 的聊天记录',
-        'history_description': '私聊消息、图片和文件都会集中在这里，支持搜索、分页和看图浏览。',
-        'history_scope_label': '私聊记录',
-        'history_target_name': other_profile.get_display_name(),
-        'history_items_json': mark_safe(json.dumps(history_browser_items)),
-        'history_back_url': next_url,
-        'history_back_label': '返回私聊',
-        'history_avatar_label': other_profile.get_avatar_label(),
-        'history_avatar_url': other_profile.avatar_url,
-        'history_meta': f'好友 ID {other_profile.friend_id}',
-        'embed_mode': embed_mode,
-        'pending_friend_requests_count': FriendRequest.objects.filter(
-            recipient=request.user,
-            status=FriendRequest.STATUS_PENDING,
-        ).count(),
     })
 
 
 @login_required
 @require_POST
-def delete_direct_conversation(request, public_id):
+def delete_direct_conversation(request, username):
     try:
-        other_user = resolve_user_by_public_id(public_id)
+        other_user = User.objects.get(username=username)
     except User.DoesNotExist:
         messages.error(request, '用户不存在')
         next_url = request.POST.get('next')
@@ -2217,92 +1885,6 @@ def delete_direct_conversation(request, public_id):
     if next_url:
         return redirect(next_url)
     return redirect('chat_index')
-
-
-@login_required
-def user_profile_legacy(request, username):
-    try:
-        target_user, _ = resolve_user_by_username(username)
-    except User.DoesNotExist:
-        messages.error(request, '用户不存在')
-        return redirect('chat_index')
-    return build_canonical_public_id_redirect(request, 'user_profile', get_or_create_chat_profile(target_user).public_id)
-
-
-@login_required
-@xframe_options_sameorigin
-def direct_chat_legacy(request, username):
-    try:
-        other_user, _ = resolve_user_by_username(username)
-    except User.DoesNotExist:
-        messages.error(request, '用户不存在')
-        return redirect('chat_index')
-    return build_canonical_public_id_redirect(request, 'direct_chat', get_or_create_chat_profile(other_user).public_id)
-
-
-@login_required
-@require_POST
-def mark_direct_read_legacy(request, username):
-    try:
-        other_user, _ = resolve_user_by_username(username)
-    except User.DoesNotExist:
-        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
-    return mark_direct_read(request, get_or_create_chat_profile(other_user).public_id)
-
-
-@login_required
-@require_POST
-def upload_direct_attachment_legacy(request, username):
-    try:
-        other_user, _ = resolve_user_by_username(username)
-    except User.DoesNotExist:
-        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
-    return upload_direct_attachment(request, get_or_create_chat_profile(other_user).public_id)
-
-
-@login_required
-@require_POST
-def favorite_direct_image_emoji_legacy(request, username, message_id):
-    try:
-        other_user, _ = resolve_user_by_username(username)
-    except User.DoesNotExist:
-        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
-    return favorite_direct_image_emoji(request, get_or_create_chat_profile(other_user).public_id, message_id)
-
-
-@login_required
-@require_POST
-def send_direct_emoji_legacy(request, username, emoji_id):
-    try:
-        other_user, _ = resolve_user_by_username(username)
-    except User.DoesNotExist:
-        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
-    return send_direct_emoji(request, get_or_create_chat_profile(other_user).public_id, emoji_id)
-
-
-@login_required
-@require_POST
-def delete_direct_conversation_legacy(request, username):
-    try:
-        other_user, _ = resolve_user_by_username(username)
-    except User.DoesNotExist:
-        messages.error(request, '用户不存在')
-        next_url = request.POST.get('next')
-        if next_url:
-            return redirect(next_url)
-        return redirect('chat_index')
-    return delete_direct_conversation(request, get_or_create_chat_profile(other_user).public_id)
-
-
-@login_required
-@require_POST
-def remove_friend_legacy(request, username):
-    try:
-        other_user, _ = resolve_user_by_username(username)
-    except User.DoesNotExist:
-        messages.error(request, '用户不存在')
-        return redirect('friends')
-    return remove_friend(request, get_or_create_chat_profile(other_user).public_id)
 
 
 @login_required

@@ -25,13 +25,13 @@
             <div class="user-chip">
                 <div class="avatar{% if user.chat_profile.avatar_image %} has-photo{% endif %}">
                     {% if user.chat_profile.avatar_image %}
-                        <img class="avatar-photo" src="{{ user.chat_profile.avatar_image.url }}" alt="{{ user.chat_profile.get_display_name }} 的头像">
+                        <img class="avatar-photo" src="{{ user.chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像">
                     {% else %}
-                        {{ user.chat_profile.get_avatar_label|default:user.chat_profile.get_display_name|slice:":2" }}
+                        {{ user.chat_profile.get_avatar_label|default:user.username|slice:":2" }}
                     {% endif %}
                 </div>
                 <div class="brand-title">
-                    <strong>{{ user.chat_profile.get_display_name }}</strong>
+                    <strong>{{ user.username }}</strong>
                     <span>{% if user.is_superuser %}今天也来看看大家聊得怎么样{% else %}欢迎回来，挑个房间坐坐吧{% endif %}</span>
                 </div>
             </div>
@@ -109,12 +109,12 @@
                         <div class="thread-swipe-shell{% if item.delete_url %} can-delete{% endif %}"{% if item.delete_url %} data-can-delete="true"{% endif %}>
                             <button
                                 type="button"
-                                class="thread-list-item unified-thread-item{% if active_thread and active_thread.type == item.type and active_target == item.target|default:item.name %} active{% endif %}"
+                                class="thread-list-item unified-thread-item{% if active_thread and active_thread.type == item.type and active_thread.name == item.name %} active{% endif %}"
                                 data-thread-url="{{ item.embed_url }}"
                                 data-thread-full-url="{{ item.url }}"
                                 data-thread-name="{{ item.name }}"
                                 data-thread-type="{{ item.type }}"
-                                data-thread-target="{% if item.type == 'direct' %}{{ item.target }}{% else %}{{ item.name }}{% endif %}"
+                                data-thread-target="{{ item.name }}"
                                 data-thread-preview="{{ item.last_message_preview }}"
                                 data-thread-timestamp="{{ item.last_message_at|date:'m-d H:i' }}"
                             >
@@ -181,13 +181,13 @@
                     {% if friends %}
                         {% for item in friends %}
                             <a
-                                href="{% url 'chat_index' %}?thread_type=direct&target={{ item.friend.chat_profile.public_id|urlencode }}"
+                                href="{% url 'chat_index' %}?thread_type=direct&target={{ item.friend.username|urlencode }}"
                                 class="friend-list-item friend-list-item-simple searchable-list-item"
                                 data-search-scope="friends-list"
-                                data-search-text="{{ item.friend.chat_profile.get_display_name|lower }} {{ item.friend.username|lower }} {{ item.friend.chat_profile.friend_id|default:''|lower }}"
+                                data-search-text="{{ item.friend.username|lower }} {{ item.friend.chat_profile.friend_id|default:''|lower }}"
                             >
-                                <div class="mini-avatar">{{ item.friend.chat_profile.get_avatar_label|default:item.friend.chat_profile.get_display_name|slice:":2" }}</div>
-                                <strong class="room-title" data-highlight-target>{{ item.friend.chat_profile.get_display_name }}</strong>
+                                <div class="mini-avatar">{{ item.friend.chat_profile.get_avatar_label|default:item.friend.username|slice:":2" }}</div>
+                                <strong class="room-title" data-highlight-target>{{ item.friend.username }}</strong>
                             </a>
                         {% endfor %}
                         <div class="quick-action-card" id="friend-search-empty" hidden>
@@ -455,10 +455,10 @@
             return threadType === 'room' ? '群聊' : '私聊';
         }
 
-        function isThreadTargetActive(threadType, threadTarget) {
+        function isThreadTargetActive(threadType, threadName) {
             const currentUrl = new URL(window.location.href);
             return currentUrl.searchParams.get('thread_type') === threadType
-                && currentUrl.searchParams.get('target') === threadTarget;
+                && currentUrl.searchParams.get('target') === threadName;
         }
 
         function updateConversationEmptyState() {
@@ -692,14 +692,14 @@
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'thread-list-item unified-thread-item';
-            if (isThreadTargetActive(payload.type, payload.target || payload.name)) {
+            if (isThreadTargetActive(payload.type, payload.name)) {
                 button.classList.add('active');
             }
             button.dataset.threadUrl = payload.embed_url || '';
             button.dataset.threadFullUrl = payload.url || '';
             button.dataset.threadName = payload.name || '';
             button.dataset.threadType = payload.type || '';
-            button.dataset.threadTarget = payload.target || payload.name || '';
+            button.dataset.threadTarget = payload.name || '';
             button.dataset.threadPreview = payload.preview || '';
             button.dataset.threadTimestamp = payload.timestamp || '';
 
@@ -795,7 +795,7 @@
         function filterConversationThreads(keyword) {
             const normalizedKeyword = (keyword || '').trim().toLowerCase();
             threadItems.forEach((item) => {
-            const name = (item.dataset.threadName || '').toLowerCase();
+                const name = (item.dataset.threadName || '').toLowerCase();
                 const preview = (item.dataset.threadPreview || '').toLowerCase();
                 const type = (item.dataset.threadType || '').toLowerCase();
                 const matched = !normalizedKeyword
@@ -894,7 +894,7 @@
             if (!payload) return;
             const matchedItem = threadItems.find((item) => (
                 (item.dataset.threadType || '') === (payload.threadType || '')
-                && (item.dataset.threadTarget || item.dataset.threadName || '') === (payload.threadTarget || payload.threadName || '')
+                && (item.dataset.threadName || '') === (payload.threadName || '')
             ));
             if (!matchedItem) {
                 createThreadListItem({
@@ -956,7 +956,7 @@
             if (!payload) return;
             const matchedItem = threadItems.find((item) => (
                 (item.dataset.threadType || '') === (payload.threadType || '')
-                && (item.dataset.threadTarget || item.dataset.threadName || '') === (payload.threadTarget || payload.threadName || '')
+                && (item.dataset.threadName || '') === (payload.threadName || '')
             ));
             if (!matchedItem) return;
 
@@ -1096,15 +1096,15 @@
                     .concat(data.room_threads || [])
                     .concat(data.direct_threads || []);
                 const nextThreadKeys = new Set(
-                    nextItems.map((item) => `${item.type || ''}::${item.target || item.name || ''}`)
+                    nextItems.map((item) => `${item.type || ''}::${item.name || ''}`)
                 );
 
                 threadItems.slice().forEach((item) => {
-                    const threadKey = `${item.dataset.threadType || ''}::${item.dataset.threadTarget || item.dataset.threadName || ''}`;
+                    const threadKey = `${item.dataset.threadType || ''}::${item.dataset.threadName || ''}`;
                     if (!nextThreadKeys.has(threadKey)) {
                         removeThreadItem({
                             threadType: item.dataset.threadType || '',
-                            threadTarget: item.dataset.threadTarget || item.dataset.threadName || '',
+                            threadName: item.dataset.threadName || '',
                         });
                     }
                 });
@@ -1113,7 +1113,6 @@
                     updateThreadItemStatus({
                         threadType: item.type || '',
                         threadName: item.name || '',
-                        threadTarget: item.target || item.name || '',
                         url: item.url || '',
                         embedUrl: item.embed_url || '',
                         deleteUrl: item.delete_url || '',

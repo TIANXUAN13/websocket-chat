@@ -55,15 +55,15 @@
                         {% for item in pending_requests %}
                             <div class="request-card">
                                 <div class="user-item-left">
-                                    <a href="{% url 'user_profile' item.sender.chat_profile.public_id %}?next={{ request.get_full_path|urlencode }}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
+                                    <a href="{% url 'user_profile' item.sender.username %}?next={{ request.get_full_path|urlencode }}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
                                         {% if item.sender.chat_profile.avatar_image %}
-                                            <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.chat_profile.get_display_name }} 的头像">
+                                            <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.username }} 的头像">
                                         {% else %}
-                                            {{ item.sender.chat_profile.get_avatar_label|default:item.sender.chat_profile.get_display_name|slice:":2" }}
+                                            {{ item.sender.chat_profile.get_avatar_label|default:item.sender.username|slice:":2" }}
                                         {% endif %}
                                     </a>
                                     <div>
-                                        <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.chat_profile.public_id %}?next={{ request.get_full_path|urlencode }}">{{ item.sender.chat_profile.get_display_name }}</a></strong>
+                                        <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.username %}?next={{ request.get_full_path|urlencode }}">{{ item.sender.username }}</a></strong>
                                         <div class="room-meta">
                                             <span>好友 ID：{{ item.sender.chat_profile.friend_id }}</span>
                                             <span>{{ item.created_at|date:"m-d H:i" }}</span>
@@ -140,15 +140,15 @@
                         {% for item in pending_room_join_requests %}
                             <div class="request-card">
                                 <div class="user-item-left">
-                                    <a href="{% url 'user_profile' item.requester.chat_profile.public_id %}?next={{ request.get_full_path|urlencode }}" class="mini-avatar avatar-link{% if item.requester.chat_profile.avatar_image %} has-photo{% endif %}">
+                                    <a href="{% url 'user_profile' item.requester.username %}?next={{ request.get_full_path|urlencode }}" class="mini-avatar avatar-link{% if item.requester.chat_profile.avatar_image %} has-photo{% endif %}">
                                         {% if item.requester.chat_profile.avatar_image %}
-                                            <img class="avatar-photo" src="{{ item.requester.chat_profile.avatar_image.url }}" alt="{{ item.requester.chat_profile.get_display_name }} 的头像">
+                                            <img class="avatar-photo" src="{{ item.requester.chat_profile.avatar_image.url }}" alt="{{ item.requester.username }} 的头像">
                                         {% else %}
-                                            {{ item.requester.chat_profile.get_avatar_label|default:item.requester.chat_profile.get_display_name|slice:":2" }}
+                                            {{ item.requester.chat_profile.get_avatar_label|default:item.requester.username|slice:":2" }}
                                         {% endif %}
                                     </a>
                                     <div>
-                                        <strong class="room-title">{{ item.requester.chat_profile.get_display_name }}</strong>
+                                        <strong class="room-title">{{ item.requester.username }}</strong>
                                         <div class="room-meta">
                                             <span>入群审批</span>
                                             <span>申请加入：{{ item.room.name }}</span>
@@ -221,15 +221,15 @@
                         {% for item in friend_requests_history %}
                             <div class="request-card">
                                 <div class="user-item-left">
-                                    <a href="{% url 'user_profile' item.sender.chat_profile.public_id %}?next={{ request.get_full_path|urlencode }}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
+                                    <a href="{% url 'user_profile' item.sender.username %}?next={{ request.get_full_path|urlencode }}" class="mini-avatar avatar-link{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
                                         {% if item.sender.chat_profile.avatar_image %}
-                                            <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.chat_profile.get_display_name }} 的头像">
+                                            <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.username }} 的头像">
                                         {% else %}
-                                            {{ item.sender.chat_profile.get_avatar_label|default:item.sender.chat_profile.get_display_name|slice:":2" }}
+                                            {{ item.sender.chat_profile.get_avatar_label|default:item.sender.username|slice:":2" }}
                                         {% endif %}
                                     </a>
                                     <div>
-                                        <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.chat_profile.public_id %}?next={{ request.get_full_path|urlencode }}">{{ item.sender.chat_profile.get_display_name }}</a></strong>
+                                        <strong class="room-title"><a class="card-link" href="{% url 'user_profile' item.sender.username %}?next={{ request.get_full_path|urlencode }}">{{ item.sender.username }}</a></strong>
                                         <div class="room-meta">
                                             <span>好友 ID：{{ item.sender.chat_profile.friend_id }}</span>
                                             <span>{{ item.created_at|date:"m-d H:i" }}</span>

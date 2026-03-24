@@ -252,10 +252,56 @@
 
         <div class="quick-action-card stack">
             <div class="settings-section-head">
-                <strong>聊天记录</strong>
-                <span>消息、图片和文件会在独立页面里集中浏览。</span>
+                <strong>聊天信息</strong>
+                <span>最近 30 条群聊消息与附件预览。</span>
             </div>
-            <a class="btn btn-secondary" href="{{ room_history_url }}?{% if embed_mode %}embed=1&amp;{% endif %}next={{ request.get_full_path|urlencode }}">打开聊天记录页</a>
+            {% if room_history_info %}
+                {% for item in room_history_info %}
+                    <div class="history-entry">
+                        <strong>{{ item.preview|default:"空消息" }}</strong>
+                        <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="history-entry-empty">还没有聊天记录。</div>
+            {% endif %}
+        </div>
+
+        <div class="quick-action-card stack">
+            <div class="settings-section-head">
+                <strong>聊天图片</strong>
+                <span>群里最近发送的图片都汇总在这里。</span>
+            </div>
+            {% if room_history_images %}
+                {% for item in room_history_images %}
+                    <a class="history-media-item" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                        <img src="{{ item.attachment.url }}" alt="{{ item.attachment.name }}">
+                        <div>
+                            <strong>{{ item.attachment.name }}</strong>
+                            <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                        </div>
+                    </a>
+                {% endfor %}
+            {% else %}
+                <div class="history-entry-empty">还没有聊天图片。</div>
+            {% endif %}
+        </div>
+
+        <div class="quick-action-card stack">
+            <div class="settings-section-head">
+                <strong>聊天文件</strong>
+                <span>文件资料会在这里集中查看。</span>
+            </div>
+            {% if room_history_files %}
+                {% for item in room_history_files %}
+                    <a class="history-entry" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                        <strong>{{ item.attachment.name }}</strong>
+                        <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                    </a>
+                {% endfor %}
+            {% else %}
+                <div class="history-entry-empty">还没有聊天文件。</div>
+            {% endif %}
         </div>
 
         {% if can_manage_room_avatar and pending_join_requests %}
@@ -318,12 +364,12 @@
                     <div class="user-item-left">
                         <div class="mini-avatar{% if chat_profile.avatar_image %} has-photo{% endif %}">
                             {% if chat_profile.avatar_image %}
-                                <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ chat_profile.get_display_name }} 的头像">
+                                <img class="avatar-photo" src="{{ chat_profile.avatar_image.url }}" alt="{{ user.username }} 的头像">
                             {% else %}
                                 {{ chat_profile.get_avatar_label }}
                             {% endif %}
                         </div>
-                        <span class="user-name-text">{{ chat_profile.get_display_name }}</span>
+                        <span class="user-name-text">{{ user.username }}</span>
                     </div>
                     <span class="pill pill-owner">你</span>
                 </div>
@@ -525,7 +571,7 @@
         const userEmojiUploadUrl = '{% url "upload_user_emoji" %}';
         const roomEmojiSendUrlTemplate = '{% url "send_room_emoji" room_name 999999 %}';
         const roomEmojiFavoriteUrlTemplate = '{% url "favorite_room_image_emoji" room_name 999999 %}';
-        const userProfileUrlTemplate = '{% url "user_profile" "__public_id__" %}';
+        const userProfileUrlTemplate = '{% url "user_profile" "__username__" %}';
         const userProfileNextQuery = 'next={{ user_profile_next_url|urlencode }}';
         let baseRoomMembers = {{ room_members_json }};
         const isRemovedFromRoom = {{ is_removed_from_room|yesno:"true,false" }};
@@ -549,7 +595,6 @@
         let preciseLocationRetryTimer = null;
         let preciseLocationAttemptCount = 0;
         let preciseLocationSynced = false;
-        let roomPendingUploadId = 0;
         const roomMessageSignatures = new Set();
         const PRECISE_LOCATION_SYNC_KEY = 'codex_precise_location_synced_at';
         const PRECISE_LOCATION_SYNC_TTL = 10 * 60 * 1000;
@@ -664,28 +709,6 @@
             return `${(normalized / (1024 * 1024)).toFixed(1)} MB`;
         }
 
-        function formatAttachmentDisplayName(name, maxLength = 36) {
-            const normalized = String(name || '').trim();
-            if (!normalized) return '聊天文件';
-            if (normalized.length <= maxLength) return normalized;
-            const lastDotIndex = normalized.lastIndexOf('.');
-            const hasExtension = lastDotIndex > 0 && lastDotIndex < normalized.length - 1;
-            const extension = hasExtension ? normalized.slice(lastDotIndex) : '';
-            const baseName = hasExtension ? normalized.slice(0, lastDotIndex) : normalized;
-            const reserved = extension.length + 3;
-            const headLength = Math.max(8, maxLength - reserved);
-            return `${baseName.slice(0, headLength)}...${extension}`;
-        }
-
-        function applyAttachmentDisplayNames(root = document) {
-            root.querySelectorAll('.chat-attachment-file strong, .history-media-item strong').forEach((node) => {
-                const originalText = node.dataset.originalText || node.textContent || '';
-                node.dataset.originalText = originalText;
-                node.textContent = formatAttachmentDisplayName(originalText);
-                node.title = originalText;
-            });
-        }
-
         function renderAttachmentContent(attachment) {
             if (!attachment || !attachment.url) {
                 return '';
@@ -701,15 +724,13 @@
             }
 
             const sizeText = formatAttachmentSize(attachment.size);
-            const originalName = attachment.name || '聊天文件';
             return `
                 <a class="chat-attachment chat-attachment-file" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">
-                    <strong title="${escapeHtml(originalName)}">${escapeHtml(formatAttachmentDisplayName(originalName))}</strong>
+                    <strong>${escapeHtml(attachment.name || '聊天文件')}</strong>
                     <span>${escapeHtml(sizeText || '点击下载文件')}</span>
                 </a>
             `;
         }
-
 
         function clearRoomHeartbeatTimers() {
             window.clearInterval(roomHeartbeatTimer);
@@ -959,53 +980,26 @@
             if (!file) return;
             const formData = new FormData();
             formData.append('file', file);
-            const pendingMessage = createRoomPendingUploadMessage(file);
             try {
                 sendBtn.disabled = true;
-                await new Promise((resolve, reject) => {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('POST', roomAttachmentUploadUrl, true);
-                    xhr.withCredentials = true;
-                    xhr.setRequestHeader('X-CSRFToken', csrfToken);
-                    xhr.upload.addEventListener('progress', (event) => {
-                        if (!event.lengthComputable) {
-                            updateRoomPendingUploadMessage(pendingMessage, 0, '上传中...');
-                            return;
-                        }
-                        const percent = (event.loaded / event.total) * 100;
-                        updateRoomPendingUploadMessage(pendingMessage, percent, percent >= 100 ? '服务器处理中...' : '上传中...');
-                    });
-                    xhr.addEventListener('load', () => {
-                        let payload = {};
-                        try {
-                            payload = JSON.parse(xhr.responseText || '{}');
-                        } catch (error) {
-                            reject(new Error('upload_failed'));
-                            return;
-                        }
-                        if (xhr.status < 200 || xhr.status >= 300 || !payload.ok) {
-                            reject(new Error(payload.error || 'upload_failed'));
-                            return;
-                        }
-                        if (pendingMessage.dataset.previewUrl) {
-                            URL.revokeObjectURL(pendingMessage.dataset.previewUrl);
-                        }
-                        pendingMessage.remove();
-                        appendMessage(payload.message);
-                        toggleRoomAttachmentPanel(false);
-                        resolve();
-                    });
-                    xhr.addEventListener('error', () => reject(new Error('upload_failed')));
-                    xhr.addEventListener('abort', () => reject(new Error('upload_aborted')));
-                    xhr.send(formData);
+                const response = await fetch(roomAttachmentUploadUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                    },
+                    credentials: 'same-origin',
+                    body: formData,
                 });
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.error || 'upload_failed');
+                }
+                if (!chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
+                    appendMessage(payload.message);
+                }
+                toggleRoomAttachmentPanel(false);
             } catch (error) {
-                updateRoomPendingUploadMessage(
-                    pendingMessage,
-                    100,
-                    error.message && error.message !== 'upload_failed' && error.message !== 'upload_aborted' ? error.message : '上传失败，请稍后重试',
-                    true
-                );
+                window.alert(error.message === '附件不能超过 12MB' ? error.message : '上传附件失败，请稍后再试');
             } finally {
                 sendBtn.disabled = false;
                 if (roomImageInput) roomImageInput.value = '';
@@ -1216,18 +1210,18 @@
             } else {
                 const avatarLabel = escapeHtml(data.avatar_label || getFallbackAvatar(data.user));
                 const avatarMarkup = data.avatar_url
-                    ? `<img class="avatar-photo" src="${escapeHtml(data.avatar_url)}" alt="${escapeHtml(data.display_name || data.user)} 的头像">`
+                    ? `<img class="avatar-photo" src="${escapeHtml(data.avatar_url)}" alt="${escapeHtml(data.user)} 的头像">`
                     : avatarLabel;
                 html = `<div class="msg-shell">`;
-                if (data.public_id && data.user !== username) {
-                    html += `<button class="message-avatar avatar-action${data.avatar_url ? ' has-photo' : ''}" type="button" data-friend-id="${escapeHtml(data.friend_id || '')}" data-friend-name="${escapeHtml(data.display_name || data.user)}" data-public-id="${escapeHtml(data.public_id || '')}">${avatarMarkup}</button>`;
+                if (data.friend_id && data.user !== username) {
+                    html += `<button class="message-avatar avatar-action${data.avatar_url ? ' has-photo' : ''}" type="button" data-friend-id="${escapeHtml(data.friend_id)}" data-friend-name="${escapeHtml(data.user)}">${avatarMarkup}</button>`;
                 } else {
                     html += `<div class="message-avatar${data.avatar_url ? ' has-photo' : ''}">${avatarMarkup}</div>`;
                 }
                 html += `<div class="message-stack">`;
                 html += `<div class="msg-head">`;
                 html += `<div class="msg-user-wrap">`;
-                html += `<div class="msg-user">${escapeHtml(data.display_name || data.user)}</div>`;
+                html += `<div class="msg-user">${escapeHtml(data.user)}</div>`;
                 if (data.location) {
                     html += `<div class="msg-location">${escapeHtml(data.location)}</div>`;
                 }
@@ -1248,82 +1242,6 @@
                 messagesDiv.appendChild(msgDiv);
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
             }
-        }
-
-        function createRoomPendingUploadMessage(file) {
-            const emptyChat = messagesDiv.querySelector('.empty-chat');
-            if (emptyChat) {
-                emptyChat.remove();
-            }
-            roomPendingUploadId += 1;
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'message mine upload-pending';
-            msgDiv.dataset.pendingUploadId = `room-upload-${roomPendingUploadId}`;
-            const now = new Date();
-            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-            const fileName = escapeHtml(file?.name || '上传中的文件');
-            const isImage = (file?.type || '').startsWith('image/');
-            const previewUrl = isImage ? URL.createObjectURL(file) : '';
-            msgDiv.innerHTML = `
-                <div class="msg-shell">
-                    <div class="message-avatar">${escapeHtml(myAppearance.avatar_label || username.slice(0, 2).toUpperCase())}</div>
-                    <div class="message-stack">
-                        <div class="msg-head">
-                            <div class="msg-user-wrap">
-                                <div class="msg-user">${escapeHtml(myAppearance.display_name || username)}</div>
-                            </div>
-                        </div>
-                        <div class="message-bubble">
-                            ${isImage ? `
-                                <div class="chat-attachment-stack">
-                                    <img class="upload-preview-image" src="${previewUrl}" alt="${fileName}">
-                                    <a class="chat-attachment chat-attachment-file" href="javascript:void(0)">
-                                        <strong title="[图片] ${fileName}">${escapeHtml(formatAttachmentDisplayName(`[图片] ${file?.name || '上传中的图片'}`))}</strong>
-                                        <span>准备上传...</span>
-                                    </a>
-                                </div>
-                            ` : `
-                                <a class="chat-attachment chat-attachment-file" href="javascript:void(0)">
-                                    <strong title="${fileName}">${escapeHtml(formatAttachmentDisplayName(file?.name || '上传中的文件'))}</strong>
-                                    <span>准备上传...</span>
-                                </a>
-                            `}
-                            <div class="upload-progress">
-                                <div class="upload-progress-meta">
-                                    <span class="upload-progress-status">准备上传...</span>
-                                    <span class="upload-progress-percent">0%</span>
-                                </div>
-                                <div class="upload-progress-track">
-                                    <div class="upload-progress-bar"></div>
-                                </div>
-                            </div>
-                            <div class="msg-time">${timeStr}</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            if (previewUrl) {
-                msgDiv.dataset.previewUrl = previewUrl;
-            }
-            applyAppearance(msgDiv, myAppearance);
-            messagesDiv.appendChild(msgDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            return msgDiv;
-        }
-
-        function updateRoomPendingUploadMessage(messageElement, progress, statusText, isError = false) {
-            if (!messageElement) return;
-            const normalized = Math.max(0, Math.min(100, Math.round(progress || 0)));
-            const progressWrap = messageElement.querySelector('.upload-progress');
-            const statusNode = messageElement.querySelector('.upload-progress-status');
-            const percentNode = messageElement.querySelector('.upload-progress-percent');
-            const barNode = messageElement.querySelector('.upload-progress-bar');
-            const fileDesc = messageElement.querySelector('.chat-attachment-file span');
-            if (progressWrap) progressWrap.classList.toggle('is-error', !!isError);
-            if (statusNode) statusNode.textContent = statusText || (isError ? '上传失败' : '上传中...');
-            if (percentNode) percentNode.textContent = isError ? '失败' : `${normalized}%`;
-            if (barNode) barNode.style.width = `${isError ? 100 : normalized}%`;
-            if (fileDesc) fileDesc.textContent = statusText || (isError ? '上传失败，请稍后重试' : '上传中...');
         }
 
         function applyAppearance(element, appearance) {
@@ -1366,11 +1284,8 @@
             }
         }
 
-        function openUserProfile(publicId) {
-            const targetUrl = getUserProfileUrl(publicId);
-            if (!targetUrl || targetUrl === '#') {
-                return;
-            }
+        function openUserProfile(name) {
+            const targetUrl = getUserProfileUrl(name);
             if (window.top && window.top !== window.self) {
                 window.top.location.href = targetUrl;
                 return;
@@ -1385,8 +1300,6 @@
             baseRoomMembers.forEach((member) => {
                 merged.set(member.username, {
                     username: member.username,
-                    display_name: member.display_name || member.username,
-                    public_id: member.public_id || '',
                     avatar_label: member.avatar_label,
                     avatar_url: member.avatar_url,
                     friend_id: member.friend_id,
@@ -1400,8 +1313,6 @@
             Object.entries(onlineMap).forEach(([name, meta]) => {
                 const previous = merged.get(name) || {
                     username: name,
-                    display_name: name,
-                    public_id: '',
                     avatar_label: getFallbackAvatar(name),
                     avatar_url: '',
                     friend_id: '',
@@ -1412,8 +1323,6 @@
                 };
                 merged.set(name, {
                     ...previous,
-                    display_name: meta.display_name || previous.display_name || name,
-                    public_id: meta.public_id || previous.public_id || '',
                     avatar_label: meta.avatar_label || previous.avatar_label,
                     avatar_url: meta.avatar_url || previous.avatar_url,
                     friend_id: meta.friend_id || previous.friend_id,
@@ -1451,13 +1360,12 @@
 
             for (const meta of entries) {
                 const user = meta.username;
-                const displayName = meta.display_name || user;
                 const isOwnerUser = !!meta.is_owner;
                 const isAdminUser = !!meta.is_admin;
                 const currentAdminCount = entries.filter((entry) => entry.is_admin && !entry.is_owner).length;
                 const avatarLabel = escapeHtml((meta.avatar_label || getFallbackAvatar(user)));
                 const avatarMarkup = meta.avatar_url
-                    ? `<img class="avatar-photo" src="${escapeHtml(meta.avatar_url)}" alt="${escapeHtml(displayName)} 的头像">`
+                    ? `<img class="avatar-photo" src="${escapeHtml(meta.avatar_url)}" alt="${escapeHtml(user)} 的头像">`
                     : avatarLabel;
                 const userItem = document.createElement('div');
                 userItem.className = 'user-item';
@@ -1501,10 +1409,10 @@
 
                 userItem.innerHTML = `
                     <div class="user-item-left">
-                        ${meta.public_id && user !== username
-                            ? `<button class="mini-avatar avatar-action${meta.avatar_url ? ' has-photo' : ''}" type="button" data-friend-id="${escapeHtml(meta.friend_id || '')}" data-friend-name="${escapeHtml(displayName)}" data-public-id="${escapeHtml(meta.public_id || '')}">${avatarMarkup}</button>`
+                        ${meta.friend_id && user !== username
+                            ? `<button class="mini-avatar avatar-action${meta.avatar_url ? ' has-photo' : ''}" type="button" data-friend-id="${escapeHtml(meta.friend_id)}" data-friend-name="${escapeHtml(user)}">${avatarMarkup}</button>`
                             : `<div class="mini-avatar${meta.avatar_url ? ' has-photo' : ''}">${avatarMarkup}</div>`}
-                        <span class="user-name-text">${escapeHtml(displayName)}</span>
+                        <span class="user-name-text">${escapeHtml(user)}</span>
                     </div>
                     <div class="user-item-actions">
                         ${badges.join('')}
@@ -1538,9 +1446,8 @@
             return normalized.slice(0, 2).toUpperCase();
         }
 
-        function getUserProfileUrl(publicId) {
-            if (!publicId) return '#';
-            return `${userProfileUrlTemplate.replace('__public_id__', encodeURIComponent(publicId))}?${userProfileNextQuery}`;
+        function getUserProfileUrl(name) {
+            return `${userProfileUrlTemplate.replace('__username__', encodeURIComponent(name))}?${userProfileNextQuery}`;
         }
 
         messageContextMenu.addEventListener('click', async function(event) {
@@ -1890,8 +1797,8 @@
             }
             const actionTarget = event.target.closest('.avatar-action');
             if (!actionTarget) return;
-            const publicId = actionTarget.dataset.publicId || '';
-            openUserProfile(publicId);
+            const friendName = actionTarget.dataset.friendName || '这位用户';
+            openUserProfile(friendName);
         });
 
         document.addEventListener('keydown', function(event) {
@@ -1925,7 +1832,6 @@
         connectRoomSocket();
         requestPreciseLocation();
         switchRoomEmojiTab('builtin');
-        applyAttachmentDisplayNames();
         markRoomAsRead();
         updateUserList(currentOnlineUsers);
         if (isRemovedFromRoom) {

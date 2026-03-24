@@ -53,15 +53,15 @@
             <div class="room-list friend-name-list">
                 {% if friends %}
                     {% for item in friends %}
-                        <a href="{% url 'inbox' %}?thread_type=direct&target={{ item.friend.chat_profile.public_id|urlencode }}" class="friend-list-item friend-list-item-simple">
+                        <a href="{% url 'inbox' %}?thread_type=direct&target={{ item.friend.username|urlencode }}" class="friend-list-item friend-list-item-simple">
                             <div class="mini-avatar{% if item.friend.chat_profile.avatar_image %} has-photo{% endif %}">
                                 {% if item.friend.chat_profile.avatar_image %}
-                                    <img class="avatar-photo" src="{{ item.friend.chat_profile.avatar_image.url }}" alt="{{ item.friend.chat_profile.get_display_name }} 的头像">
+                                    <img class="avatar-photo" src="{{ item.friend.chat_profile.avatar_image.url }}" alt="{{ item.friend.username }} 的头像">
                                 {% else %}
-                                    {{ item.friend.chat_profile.get_avatar_label|default:item.friend.chat_profile.get_display_name|slice:":2" }}
+                                    {{ item.friend.chat_profile.get_avatar_label|default:item.friend.username|slice:":2" }}
                                 {% endif %}
                             </div>
-                            <strong class="room-title">{{ item.friend.chat_profile.get_display_name }}</strong>
+                            <strong class="room-title">{{ item.friend.username }}</strong>
                         </a>
                     {% endfor %}
                 {% else %}

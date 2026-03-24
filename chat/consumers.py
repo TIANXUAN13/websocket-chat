@@ -46,8 +46,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
             self.room_users[self.room_name][self.channel_name] = {
                 'username': self.user,
-                'display_name': await self.get_user_display_name(),
-                'public_id': await self.get_user_public_id(),
                 'is_owner': await self.check_is_owner(),
                 'is_admin': await self.check_is_admin(),
                 'avatar_label': await self.get_user_avatar_label(),
@@ -144,8 +142,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if self.room_name in self.room_users:
             self.room_users[self.room_name][self.channel_name] = {
                 'username': self.user,
-                'display_name': await self.get_user_display_name(),
-                'public_id': await self.get_user_public_id(),
                 'is_owner': await self.check_is_owner(),
                 'is_admin': await self.check_is_admin(),
                 'avatar_label': await self.get_user_avatar_label(),
@@ -352,8 +348,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except Room.DoesNotExist:
             return {
                 username: {
-                    'display_name': meta.get('display_name', username),
-                    'public_id': meta.get('public_id', ''),
                     'is_owner': bool(meta.get('is_owner')),
                     'is_admin': bool(meta.get('is_admin')),
                     'avatar_label': meta.get('avatar_label', self.get_avatar_label_for_username(username)),
@@ -376,8 +370,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             profile = getattr(linked_user, 'chat_profile', None) or self.get_or_create_profile(linked_user)
             connected_meta = connected_users.get(linked_user.username, {})
             users[linked_user.username] = {
-                'display_name': connected_meta.get('display_name', profile.get_display_name()),
-                'public_id': connected_meta.get('public_id', profile.public_id),
                 'is_owner': bool(room.created_by_id == linked_user.id),
                 'is_admin': bool(membership.is_admin),
                 'avatar_label': connected_meta.get('avatar_label', profile.get_avatar_label()),
@@ -390,8 +382,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if username in users:
                 continue
             users[username] = {
-                'display_name': meta.get('display_name', username),
-                'public_id': meta.get('public_id', ''),
                 'is_owner': bool(meta.get('is_owner')),
                 'is_admin': bool(meta.get('is_admin')),
                 'avatar_label': meta.get('avatar_label', self.get_avatar_label_for_username(username)),
@@ -578,8 +568,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'id': msg.id,
             'message': msg.message,
             'user': msg.username,
-            'public_id': appearance.get('public_id', ''),
-            'display_name': appearance.get('display_name', msg.username),
             'type': msg.message_type,
             'timestamp': msg.timestamp.isoformat() if msg.timestamp else None,
             'location': location_label,
@@ -620,22 +608,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if user and user.is_authenticated:
             profile = self.get_or_create_profile(user)
             return profile.friend_id
-        return ''
-
-    @database_sync_to_async
-    def get_user_display_name(self):
-        user = self.scope.get('user')
-        if user and user.is_authenticated:
-            profile = self.get_or_create_profile(user)
-            return profile.get_display_name()
-        return self.user
-
-    @database_sync_to_async
-    def get_user_public_id(self):
-        user = self.scope.get('user')
-        if user and user.is_authenticated:
-            profile = self.get_or_create_profile(user)
-            return profile.public_id
         return ''
 
     @database_sync_to_async
@@ -688,8 +660,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
 class DirectChatConsumer(AsyncWebsocketConsumer):
     @staticmethod
-    def build_group_name(user_id_a, user_id_b):
-        ordered = sorted([str(user_id_a or ''), str(user_id_b or '')])
+    def build_group_name(username_a, username_b):
+        ordered = sorted([(username_a or '').lower(), (username_b or '').lower()])
         room_hash = hashlib.sha256('::'.join(ordered).encode('utf-8')).hexdigest()[:32]
         return f"dm_{room_hash}"
 
@@ -699,16 +671,14 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
-        self.other_public_id = self.scope['url_route']['kwargs'].get('public_id')
-        self.other_username = self.scope['url_route']['kwargs'].get('username')
+        self.other_username = self.scope['url_route']['kwargs']['username']
         connection = await self.get_connection_data()
         if not connection:
             await self.close()
             return
 
         self.other_user_id = connection['other_user_id']
-        self.other_username = connection['other_username']
-        self.room_group_name = self.build_group_name(self.current_user.id, self.other_user_id)
+        self.room_group_name = self.build_group_name(self.current_user.username, self.other_username)
 
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
@@ -756,20 +726,11 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_connection_data(self):
         from django.contrib.auth.models import User
-        from .models import DirectConversation, DirectConversationState, Friendship, UserChatProfile, UsernameAlias
+        from .models import DirectConversation, DirectConversationState, Friendship
 
-        other_user = None
-        if self.other_public_id:
-            profile = UserChatProfile.objects.filter(public_id=self.other_public_id).select_related('user').first()
-            if profile:
-                other_user = profile.user
-        elif self.other_username:
-            try:
-                other_user = User.objects.get(username=self.other_username)
-            except User.DoesNotExist:
-                alias = UsernameAlias.objects.filter(username__iexact=self.other_username).select_related('user').first()
-                other_user = alias.user if alias else None
-        if not other_user:
+        try:
+            other_user = User.objects.get(username=self.other_username)
+        except User.DoesNotExist:
             return None
 
         if other_user == self.current_user:
@@ -785,26 +746,16 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
         return {
             'conversation_id': conversation.id,
             'other_user_id': other_user.id,
-            'other_username': other_user.username,
         }
 
     @database_sync_to_async
     def save_direct_message(self, message):
         from django.contrib.auth.models import User
-        from .models import DirectConversation, DirectConversationState, DirectMessage, Friendship, UserChatProfile, UsernameAlias
+        from .models import DirectConversation, DirectConversationState, DirectMessage, Friendship
 
-        other_user = None
-        if self.other_public_id:
-            profile = UserChatProfile.objects.filter(public_id=self.other_public_id).select_related('user').first()
-            if profile:
-                other_user = profile.user
-        elif self.other_username:
-            try:
-                other_user = User.objects.get(username=self.other_username)
-            except User.DoesNotExist:
-                alias = UsernameAlias.objects.filter(username__iexact=self.other_username).select_related('user').first()
-                other_user = alias.user if alias else None
-        if not other_user:
+        try:
+            other_user = User.objects.get(username=self.other_username)
+        except User.DoesNotExist:
             return None
 
         if not Friendship.objects.filter(user=self.current_user, friend=other_user).exists():
@@ -826,8 +777,6 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
             'type': 'chat',
             'message': direct_message.content,
             'user': self.current_user.username,
-            'display_name': profile.get_display_name(),
-            'public_id': profile.public_id,
             'timestamp': direct_message.created_at.isoformat(),
             'avatar_label': profile.get_avatar_label(),
             'avatar_url': profile.avatar_url,
@@ -867,7 +816,7 @@ class DirectChatConsumer(AsyncWebsocketConsumer):
     async def notify_direct_summary_refresh(self):
         usernames = {
             (self.current_user.username or '').strip(),
-            (getattr(self, 'other_username', '') or '').strip(),
+            (self.other_username or '').strip(),
         }
         for username in usernames:
             if not username:

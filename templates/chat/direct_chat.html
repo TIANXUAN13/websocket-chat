@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>与 {{ other_profile.get_display_name }} 的私聊 - {{ site_title }}</title>
+    <title>与 {{ other_user.username }} 的私聊 - {{ site_title }}</title>
     {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
     <link rel="stylesheet" href="{% static 'chat-ui.css' %}">
     {% if not embed_mode %}
@@ -32,13 +32,13 @@
             <div class="room-identity">
                 <div class="room-glyph room-avatar room-avatar-large{% if other_profile.avatar_image %} has-photo{% endif %}">
                     {% if other_profile.avatar_image %}
-                        <img class="avatar-photo" src="{{ other_profile.avatar_image.url }}" alt="{{ other_profile.get_display_name }} 的头像">
+                        <img class="avatar-photo" src="{{ other_profile.avatar_image.url }}" alt="{{ other_user.username }} 的头像">
                     {% else %}
                         {{ other_profile.get_avatar_label }}
                     {% endif %}
                 </div>
                 <div class="room-title-block">
-                    <strong>{{ other_profile.get_display_name }}</strong>
+                    <strong>{{ other_user.username }}</strong>
                     <span>{{ other_profile.bio|default:"你们已经是好友，可以开始私聊了。" }}</span>
                     <div class="room-stats-inline">
                         <span class="pill pill-muted">好友 ID {{ other_profile.friend_id }}</span>
@@ -92,8 +92,8 @@
             </div>
             <div class="quick-action-card stack">
                 <strong>好友操作</strong>
-                <a class="btn btn-secondary" href="{% url 'user_profile' other_profile.public_id %}?next={{ request.get_full_path|urlencode }}">查看好友资料</a>
-                <form method="post" action="{% url 'remove_friend' other_profile.public_id %}">
+                <a class="btn btn-secondary" href="{% url 'user_profile' other_user.username %}?next={{ request.get_full_path|urlencode }}">查看好友资料</a>
+                <form method="post" action="{% url 'remove_friend' other_user.username %}">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{% url 'friends' %}">
                     <button class="btn btn-danger" type="submit" onclick="return confirm('确定删除这个好友吗？删除后将不能继续直接聊天。');">删除好友</button>
@@ -101,10 +101,54 @@
             </div>
             <div class="quick-action-card stack">
                 <div class="settings-section-head">
-                    <strong>聊天记录</strong>
-                    <span>消息、图片和文件会在独立页面里集中浏览。</span>
+                    <strong>聊天信息</strong>
+                    <span>最近 30 条你当前还能看到的聊天记录。</span>
                 </div>
-                <a class="btn btn-secondary" href="{{ direct_history_url }}?{% if embed_mode %}embed=1&amp;{% endif %}next={{ request.get_full_path|urlencode }}">打开聊天记录页</a>
+                {% if direct_history_info %}
+                    {% for item in direct_history_info %}
+                        <div class="history-entry">
+                            <strong>{{ item.preview|default:"空消息" }}</strong>
+                            <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="history-entry-empty">还没有聊天记录。</div>
+                {% endif %}
+            </div>
+            <div class="quick-action-card stack">
+                <div class="settings-section-head">
+                    <strong>聊天图片</strong>
+                    <span>最近发送的图片会集中显示在这里。</span>
+                </div>
+                {% if direct_history_images %}
+                    {% for item in direct_history_images %}
+                        <a class="history-media-item" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                            <img src="{{ item.attachment.url }}" alt="{{ item.attachment.name }}">
+                            <div>
+                                <strong>{{ item.attachment.name }}</strong>
+                                <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                            </div>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="history-entry-empty">还没有聊天图片。</div>
+                {% endif %}
+            </div>
+            <div class="quick-action-card stack">
+                <div class="settings-section-head">
+                    <strong>聊天文件</strong>
+                    <span>文档和其它附件会在这里聚合。</span>
+                </div>
+                {% if direct_history_files %}
+                    {% for item in direct_history_files %}
+                        <a class="history-entry" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                            <strong>{{ item.attachment.name }}</strong>
+                            <span>{{ item.created_at|date:"m-d H:i" }}</span>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="history-entry-empty">还没有聊天文件。</div>
+                {% endif %}
             </div>
         </div>
     </aside>
@@ -128,13 +172,13 @@
             <div class="direct-friend-card">
                 <div class="mini-avatar direct-friend-avatar{% if other_profile.avatar_image %} has-photo{% endif %}">
                     {% if other_profile.avatar_image %}
-                        <img class="avatar-photo" src="{{ other_profile.avatar_image.url }}" alt="{{ other_profile.get_display_name }} 的头像">
+                        <img class="avatar-photo" src="{{ other_profile.avatar_image.url }}" alt="{{ other_user.username }} 的头像">
                     {% else %}
                         {{ other_profile.get_avatar_label }}
                     {% endif %}
                 </div>
                 <div class="stack compact-stack">
-                    <strong>{{ other_profile.get_display_name }}</strong>
+                    <strong>{{ other_user.username }}</strong>
                     <span>好友 ID：{{ other_profile.friend_id }}</span>
                     <span>{{ other_profile.bio|default:"对方还没有填写个人介绍。" }}</span>
                 </div>
@@ -145,7 +189,7 @@
         <section class="chat-main panel-card{% if embed_mode %} embed-chat-main{% endif %}">
             <div class="chat-head">
                 <div>
-                    <strong>{% if embed_mode %}{{ other_profile.get_display_name }}{% else %}私聊记录{% endif %}</strong>
+                    <strong>{% if embed_mode %}{{ other_user.username }}{% else %}私聊记录{% endif %}</strong>
                     <span>{% if embed_mode %}{{ other_profile.bio|default:"你们已经是好友，可以直接聊天。" }}{% else %}这里只展示你当前还能看到的历史消息，新消息会持续自动保存。{% endif %}</span>
                 </div>
                 <span class="pill pill-muted" id="direct-status-text">连接中...</span>
@@ -158,7 +202,7 @@
                             <div class="msg-shell">
                                 <div class="message-avatar{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
                                     {% if item.sender.chat_profile.avatar_image %}
-                                        <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.chat_profile.get_display_name }} 的头像">
+                                        <img class="avatar-photo" src="{{ item.sender.chat_profile.avatar_image.url }}" alt="{{ item.sender.username }} 的头像">
                                     {% else %}
                                         {{ item.sender.chat_profile.get_avatar_label }}
                                     {% endif %}
@@ -166,7 +210,7 @@
                                 <div class="message-stack">
                                     <div class="msg-head">
                                         <div class="msg-user-wrap">
-                                            <div class="msg-user">{{ item.sender.chat_profile.get_display_name }}</div>
+                                            <div class="msg-user">{{ item.sender.username }}</div>
                                         </div>
                                     </div>
                                     <div class="message-bubble">
@@ -360,13 +404,12 @@
         const directMessageContextMenu = document.getElementById('direct-message-context-menu');
         const currentUsername = '{{ user.username }}';
         const otherUsername = {{ other_username_json }};
-        const otherPublicId = '{{ other_public_id|escapejs }}';
         const csrfToken = '{{ csrf_token }}';
-        const markDirectReadUrl = '{% url "mark_direct_read" other_profile.public_id %}';
-        const directAttachmentUploadUrl = '{% url "upload_direct_attachment" other_profile.public_id %}';
+        const markDirectReadUrl = '{% url "mark_direct_read" other_user.username %}';
+        const directAttachmentUploadUrl = '{% url "upload_direct_attachment" other_user.username %}';
         const userEmojiUploadUrl = '{% url "upload_user_emoji" %}';
-        const directEmojiSendUrlTemplate = '{% url "send_direct_emoji" other_profile.public_id 999999 %}';
-        const directEmojiFavoriteUrlTemplate = '{% url "favorite_direct_image_emoji" other_profile.public_id 999999 %}';
+        const directEmojiSendUrlTemplate = '{% url "send_direct_emoji" other_user.username 999999 %}';
+        const directEmojiFavoriteUrlTemplate = '{% url "favorite_direct_image_emoji" other_user.username 999999 %}';
         const myAppearance = {{ chat_profile_payload_json }};
         const otherAppearance = {{ other_profile_payload_json }};
         let activeDirectMessageElement = null;
@@ -381,7 +424,6 @@
         let preciseLocationRetryTimer = null;
         let preciseLocationAttemptCount = 0;
         let preciseLocationSynced = false;
-        let directPendingUploadId = 0;
         const directMessageSignatures = new Set();
         const PRECISE_LOCATION_SYNC_KEY = 'codex_precise_location_synced_at';
         const PRECISE_LOCATION_SYNC_TTL = 10 * 60 * 1000;
@@ -453,28 +495,6 @@
             return `${(normalized / (1024 * 1024)).toFixed(1)} MB`;
         }
 
-        function formatAttachmentDisplayName(name, maxLength = 36) {
-            const normalized = String(name || '').trim();
-            if (!normalized) return '聊天文件';
-            if (normalized.length <= maxLength) return normalized;
-            const lastDotIndex = normalized.lastIndexOf('.');
-            const hasExtension = lastDotIndex > 0 && lastDotIndex < normalized.length - 1;
-            const extension = hasExtension ? normalized.slice(lastDotIndex) : '';
-            const baseName = hasExtension ? normalized.slice(0, lastDotIndex) : normalized;
-            const reserved = extension.length + 3;
-            const headLength = Math.max(8, maxLength - reserved);
-            return `${baseName.slice(0, headLength)}...${extension}`;
-        }
-
-        function applyAttachmentDisplayNames(root = document) {
-            root.querySelectorAll('.chat-attachment-file strong, .history-media-item strong').forEach((node) => {
-                const originalText = node.dataset.originalText || node.textContent || '';
-                node.dataset.originalText = originalText;
-                node.textContent = formatAttachmentDisplayName(originalText);
-                node.title = originalText;
-            });
-        }
-
         function renderAttachmentContent(attachment) {
             if (!attachment || !attachment.url) {
                 return '';
@@ -490,15 +510,13 @@
             }
 
             const sizeText = formatAttachmentSize(attachment.size);
-            const originalName = attachment.name || '聊天文件';
             return `
                 <a class="chat-attachment chat-attachment-file" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">
-                    <strong title="${escapeHtml(originalName)}">${escapeHtml(formatAttachmentDisplayName(originalName))}</strong>
+                    <strong>${escapeHtml(attachment.name || '聊天文件')}</strong>
                     <span>${escapeHtml(sizeText || '点击下载文件')}</span>
                 </a>
             `;
         }
-
 
         function getDirectPreviewText(data, parsedMessage) {
             if (parsedMessage.body || parsedMessage.fullText) {
@@ -754,11 +772,11 @@
             msgDiv.dataset.attachmentName = data.attachment?.name || '';
             msgDiv.innerHTML = `
                 <div class="msg-shell">
-                    <div class="message-avatar${data.avatar_url ? ' has-photo' : ''}">${data.avatar_url ? `<img class="avatar-photo" src="${escapeHtml(data.avatar_url)}" alt="${escapeHtml(data.display_name || data.user)} 的头像">` : escapeHtml(data.avatar_label)}</div>
+                    <div class="message-avatar${data.avatar_url ? ' has-photo' : ''}">${data.avatar_url ? `<img class="avatar-photo" src="${escapeHtml(data.avatar_url)}" alt="${escapeHtml(data.user)} 的头像">` : escapeHtml(data.avatar_label)}</div>
                     <div class="message-stack">
                         <div class="msg-head">
                             <div class="msg-user-wrap">
-                                <div class="msg-user">${escapeHtml(data.display_name || data.user)}</div>
+                                <div class="msg-user">${escapeHtml(data.user)}</div>
                             </div>
                         </div>
                         <div class="message-bubble">
@@ -774,82 +792,6 @@
             directMessageList.appendChild(msgDiv);
             scrollDirectMessagesToBottom();
             requestAnimationFrame(() => syncParentThreadStatusFromElement(msgDiv));
-        }
-
-        function createDirectPendingUploadMessage(file) {
-            const emptyChat = directMessageList.querySelector('.empty-chat');
-            if (emptyChat) {
-                emptyChat.remove();
-            }
-            directPendingUploadId += 1;
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'message mine upload-pending';
-            msgDiv.dataset.pendingUploadId = `direct-upload-${directPendingUploadId}`;
-            const now = new Date();
-            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-            const fileName = escapeHtml(file?.name || '上传中的文件');
-            const isImage = (file?.type || '').startsWith('image/');
-            const previewUrl = isImage ? URL.createObjectURL(file) : '';
-            msgDiv.innerHTML = `
-                <div class="msg-shell">
-                    <div class="message-avatar">${escapeHtml(myAppearance.avatar_label || currentUsername.slice(0, 2).toUpperCase())}</div>
-                    <div class="message-stack">
-                        <div class="msg-head">
-                            <div class="msg-user-wrap">
-                                <div class="msg-user">${escapeHtml(myAppearance.display_name || currentUsername)}</div>
-                            </div>
-                        </div>
-                        <div class="message-bubble">
-                            ${isImage ? `
-                                <div class="chat-attachment-stack">
-                                    <img class="upload-preview-image" src="${previewUrl}" alt="${fileName}">
-                                    <a class="chat-attachment chat-attachment-file" href="javascript:void(0)">
-                                        <strong title="[图片] ${fileName}">${escapeHtml(formatAttachmentDisplayName(`[图片] ${file?.name || '上传中的图片'}`))}</strong>
-                                        <span>准备上传...</span>
-                                    </a>
-                                </div>
-                            ` : `
-                                <a class="chat-attachment chat-attachment-file" href="javascript:void(0)">
-                                    <strong title="${fileName}">${escapeHtml(formatAttachmentDisplayName(file?.name || '上传中的文件'))}</strong>
-                                    <span>准备上传...</span>
-                                </a>
-                            `}
-                            <div class="upload-progress">
-                                <div class="upload-progress-meta">
-                                    <span class="upload-progress-status">准备上传...</span>
-                                    <span class="upload-progress-percent">0%</span>
-                                </div>
-                                <div class="upload-progress-track">
-                                    <div class="upload-progress-bar"></div>
-                                </div>
-                            </div>
-                            <div class="msg-time">${timeStr}</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            if (previewUrl) {
-                msgDiv.dataset.previewUrl = previewUrl;
-            }
-            applyAppearance(msgDiv, myAppearance);
-            directMessageList.appendChild(msgDiv);
-            scrollDirectMessagesToBottom();
-            return msgDiv;
-        }
-
-        function updateDirectPendingUploadMessage(messageElement, progress, statusText, isError = false) {
-            if (!messageElement) return;
-            const normalized = Math.max(0, Math.min(100, Math.round(progress || 0)));
-            const progressWrap = messageElement.querySelector('.upload-progress');
-            const statusNode = messageElement.querySelector('.upload-progress-status');
-            const percentNode = messageElement.querySelector('.upload-progress-percent');
-            const barNode = messageElement.querySelector('.upload-progress-bar');
-            const fileDesc = messageElement.querySelector('.chat-attachment-file span');
-            if (progressWrap) progressWrap.classList.toggle('is-error', !!isError);
-            if (statusNode) statusNode.textContent = statusText || (isError ? '上传失败' : '上传中...');
-            if (percentNode) percentNode.textContent = isError ? '失败' : `${normalized}%`;
-            if (barNode) barNode.style.width = `${isError ? 100 : normalized}%`;
-            if (fileDesc) fileDesc.textContent = statusText || (isError ? '上传失败，请稍后重试' : '上传中...');
         }
 
         async function markDirectAsRead() {
@@ -869,7 +811,7 @@
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const directSocketUrl = protocol + '//' + window.location.host + '/ws/direct/id/' + encodeURIComponent(otherPublicId) + '/';
+        const directSocketUrl = protocol + '//' + window.location.host + '/ws/direct/' + encodeURIComponent(otherUsername) + '/';
 
         function clearDirectHeartbeatTimers() {
             window.clearInterval(directHeartbeatTimer);
@@ -1038,53 +980,26 @@
             if (!file) return;
             const formData = new FormData();
             formData.append('file', file);
-            const pendingMessage = createDirectPendingUploadMessage(file);
             try {
                 directSendBtn.disabled = true;
-                await new Promise((resolve, reject) => {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('POST', directAttachmentUploadUrl, true);
-                    xhr.withCredentials = true;
-                    xhr.setRequestHeader('X-CSRFToken', csrfToken);
-                    xhr.upload.addEventListener('progress', (event) => {
-                        if (!event.lengthComputable) {
-                            updateDirectPendingUploadMessage(pendingMessage, 0, '上传中...');
-                            return;
-                        }
-                        const percent = (event.loaded / event.total) * 100;
-                        updateDirectPendingUploadMessage(pendingMessage, percent, percent >= 100 ? '服务器处理中...' : '上传中...');
-                    });
-                    xhr.addEventListener('load', () => {
-                        let payload = {};
-                        try {
-                            payload = JSON.parse(xhr.responseText || '{}');
-                        } catch (error) {
-                            reject(new Error('upload_failed'));
-                            return;
-                        }
-                        if (xhr.status < 200 || xhr.status >= 300 || !payload.ok) {
-                            reject(new Error(payload.error || 'upload_failed'));
-                            return;
-                        }
-                        if (pendingMessage.dataset.previewUrl) {
-                            URL.revokeObjectURL(pendingMessage.dataset.previewUrl);
-                        }
-                        pendingMessage.remove();
-                        appendDirectMessage(payload.message);
-                        toggleDirectAttachmentPanel(false);
-                        resolve();
-                    });
-                    xhr.addEventListener('error', () => reject(new Error('upload_failed')));
-                    xhr.addEventListener('abort', () => reject(new Error('upload_aborted')));
-                    xhr.send(formData);
+                const response = await fetch(directAttachmentUploadUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                    },
+                    credentials: 'same-origin',
+                    body: formData,
                 });
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.error || 'upload_failed');
+                }
+                if (!directSocket || directSocket.readyState !== WebSocket.OPEN) {
+                    appendDirectMessage(payload.message);
+                }
+                toggleDirectAttachmentPanel(false);
             } catch (error) {
-                updateDirectPendingUploadMessage(
-                    pendingMessage,
-                    100,
-                    error.message && error.message !== 'upload_failed' && error.message !== 'upload_aborted' ? error.message : '上传失败，请稍后重试',
-                    true
-                );
+                window.alert(error.message === '附件不能超过 12MB' ? error.message : '上传附件失败，请稍后再试');
             } finally {
                 directSendBtn.disabled = false;
                 if (directImageInput) directImageInput.value = '';
@@ -1318,7 +1233,6 @@
         connectDirectSocket();
         requestPreciseLocation();
         switchDirectEmojiTab('builtin');
-        applyAttachmentDisplayNames();
         scrollDirectMessagesToBottom();
         markDirectAsRead();
         const latestDirectMessageElement = Array.from(directMessageList.querySelectorAll('.message')).pop();

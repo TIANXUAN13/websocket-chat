@@ -20,7 +20,6 @@ from .models import (
     RoomJoinRequest,
     RoomMembership,
     UserChatProfile,
-    UsernameAlias,
     UserLocation,
     UserSession,
 )
@@ -48,8 +47,6 @@ class ChatAppearanceTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         profile = UserChatProfile.objects.get(user=self.user)
-        self.assertTrue(profile.public_id)
-        self.assertEqual(profile.display_name, 'alice')
         self.assertEqual(profile.avatar_label, '')
         self.assertEqual(profile.color_theme, 'amber')
         self.assertEqual(profile.bubble_style, 'soft')
@@ -61,8 +58,6 @@ class ChatAppearanceTests(TestCase):
         response = self.client.post(
             reverse('profile_settings'),
             {
-                'display_name': '阿来同学',
-                'username': 'alice',
                 'avatar_label': '阿来',
                 'color_theme': 'ocean',
                 'bubble_style': 'glass',
@@ -72,7 +67,6 @@ class ChatAppearanceTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         profile = UserChatProfile.objects.get(user=self.user)
-        self.assertEqual(profile.display_name, '阿来同学')
         self.assertEqual(profile.avatar_label, '阿来')
         self.assertEqual(profile.color_theme, 'ocean')
         self.assertEqual(profile.bubble_style, 'glass')
@@ -88,8 +82,6 @@ class ChatAppearanceTests(TestCase):
         response = self.client.post(
             reverse('profile_settings'),
             {
-                'display_name': '阿来',
-                'username': 'alice',
                 'friend_id': 'alice001',
                 'avatar_label': '阿来',
                 'bio': '测试头像上传',
@@ -170,103 +162,13 @@ class ChatAppearanceTests(TestCase):
 
         response = self.client.post(
             reverse('profile_settings'),
-            {'display_name': 'alice', 'username': 'alice', 'friend_id': 'short1', 'avatar_label': '', 'bio': ''},
+            {'friend_id': 'short1', 'avatar_label': '', 'bio': ''},
             follow=True,
         )
 
         self.assertEqual(response.status_code, 200)
         messages_list = list(response.context['messages'])
         self.assertTrue(any('8 到 11 位' in str(message) for message in messages_list))
-
-    def test_profile_settings_can_change_username_and_sync_room_history(self):
-        self.login_with_valid_session()
-        Message.objects.create(room=self.room, user=self.user, username='alice', message='hello')
-
-        response = self.client.post(
-            reverse('profile_settings'),
-            {
-                'username': '阿狸',
-                'display_name': '阿狸',
-                'friend_id': '',
-                'avatar_label': '',
-                'bio': '新的中文用户名',
-                'color_theme': 'amber',
-                'bubble_style': 'soft',
-                'show_location': 'on',
-            },
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.username, '阿狸')
-        self.assertTrue(Message.objects.filter(user=self.user, username='阿狸').exists())
-        self.assertTrue(UsernameAlias.objects.filter(user=self.user, username='alice').exists())
-
-    def test_profile_settings_rejects_duplicate_username_case_insensitive(self):
-        self.login_with_valid_session()
-        User.objects.create_user(username='Alice2', password='secret123')
-
-        response = self.client.post(
-            reverse('profile_settings'),
-            {
-                'username': 'alice2',
-                'display_name': 'alice2',
-                'friend_id': 'alice001',
-                'avatar_label': '',
-                'bio': '',
-            },
-            follow=True,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        messages_list = list(response.context['messages'])
-        self.assertTrue(any('用户名已经被使用了' in str(message) for message in messages_list))
-
-    def test_old_profile_url_redirects_to_new_username(self):
-        self.login_with_valid_session()
-        self.client.post(
-            reverse('profile_settings'),
-            {
-                'username': '阿狸',
-                'display_name': '阿狸',
-                'friend_id': '',
-                'avatar_label': '',
-                'bio': '',
-            },
-        )
-
-        response = self.client.get(reverse('user_profile_legacy', args=['alice']))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('user_profile', args=[UserChatProfile.objects.get(user=self.user).public_id]))
-
-    def test_old_direct_chat_url_redirects_to_new_username(self):
-        self.login_with_valid_session()
-        other = User.objects.create_user(username='bob', password='secret123')
-        Friendship.objects.create(user=self.user, friend=other)
-        Friendship.objects.create(user=other, friend=self.user)
-        other.username = '波波'
-        other.save(update_fields=['username'])
-        UsernameAlias.objects.create(user=other, username='bob')
-
-        response = self.client.get(reverse('direct_chat_legacy', args=['bob']))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('direct_chat', args=[UserChatProfile.objects.get(user=other).public_id]))
-
-    def test_mark_direct_read_accepts_old_username_alias(self):
-        self.login_with_valid_session()
-        other = User.objects.create_user(username='bob', password='secret123')
-        Friendship.objects.create(user=self.user, friend=other)
-        Friendship.objects.create(user=other, friend=self.user)
-        other.username = '波波'
-        other.save(update_fields=['username'])
-        UsernameAlias.objects.create(user=other, username='bob')
-
-        response = self.client.post(reverse('mark_direct_read_legacy', args=['bob']))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertJSONEqual(response.content, {'ok': True})
 
     def test_removed_room_member_can_still_open_room_but_is_read_only(self):
         other = User.objects.create_user(username='bob', password='secret123')
@@ -277,16 +179,6 @@ class ChatAppearanceTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['is_removed_from_room'])
-
-    def test_removed_room_member_can_open_room_history_page(self):
-        other = User.objects.create_user(username='bob2', password='secret123')
-        RoomMembership.objects.create(room=self.room, user=other, is_active=False)
-        self.client.force_login(other)
-
-        response = self.client.get(reverse('room_history', args=[self.room.name]))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '聊天记录')
 
     def test_room_total_members_uses_active_memberships(self):
         other = User.objects.create_user(username='bob', password='secret123')
@@ -406,7 +298,7 @@ class DirectMessageFlowTests(TestCase):
     def test_user_profile_shows_direct_chat_for_friends(self):
         self.login_with_valid_session()
 
-        response = self.client.get(reverse('user_profile', args=[self.other.chat_profile.public_id]))
+        response = self.client.get(reverse('user_profile', args=[self.other.username]))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '直接聊天')
@@ -415,7 +307,7 @@ class DirectMessageFlowTests(TestCase):
         self.login_with_valid_session()
 
         response = self.client.post(
-            reverse('direct_chat', args=[self.other.chat_profile.public_id]),
+            reverse('direct_chat', args=[self.other.username]),
             {'action': 'send', 'content': '你好，私聊一下'},
         )
 
@@ -424,20 +316,13 @@ class DirectMessageFlowTests(TestCase):
         self.assertEqual(message.sender, self.user)
         self.assertEqual(message.content, '你好，私聊一下')
 
-    def test_direct_history_page_opens_for_friends(self):
-        self.login_with_valid_session()
-        response = self.client.get(reverse('direct_history', args=[self.other.chat_profile.public_id]))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '聊天记录')
-
     def test_clear_history_only_hides_messages_for_current_user(self):
         self.login_with_valid_session()
-        self.client.post(reverse('direct_chat', args=[self.other.chat_profile.public_id]), {'action': 'send', 'content': '第一条'})
-        self.client.post(reverse('direct_chat', args=[self.other.chat_profile.public_id]), {'action': 'clear_history'})
-        self.client.post(reverse('direct_chat', args=[self.other.chat_profile.public_id]), {'action': 'send', 'content': '第二条'})
+        self.client.post(reverse('direct_chat', args=[self.other.username]), {'action': 'send', 'content': '第一条'})
+        self.client.post(reverse('direct_chat', args=[self.other.username]), {'action': 'clear_history'})
+        self.client.post(reverse('direct_chat', args=[self.other.username]), {'action': 'send', 'content': '第二条'})
 
-        response = self.client.get(reverse('direct_chat', args=[self.other.chat_profile.public_id]))
+        response = self.client.get(reverse('direct_chat', args=[self.other.username]))
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, '第一条')
@@ -449,7 +334,7 @@ class DirectMessageFlowTests(TestCase):
         self.login_with_valid_session()
 
         response = self.client.post(
-            reverse('remove_friend', args=[self.other.chat_profile.public_id]),
+            reverse('remove_friend', args=[self.other.username]),
             {'next': reverse('friends')},
             follow=True,
         )
@@ -458,7 +343,7 @@ class DirectMessageFlowTests(TestCase):
         self.assertFalse(Friendship.objects.filter(user=self.user, friend=self.other).exists())
         self.assertFalse(Friendship.objects.filter(user=self.other, friend=self.user).exists())
 
-        blocked = self.client.get(reverse('direct_chat', args=[self.other.chat_profile.public_id]), follow=True)
+        blocked = self.client.get(reverse('direct_chat', args=[self.other.username]), follow=True)
         self.assertContains(blocked, '你们还不是好友')
 
 
