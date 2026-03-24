@@ -4,6 +4,7 @@ from . import consumers
 # WebSocket路由配置
 websocket_urlpatterns = [
     re_path(r'ws/chat/(?P<room_name>[^/]+)/$', consumers.ChatConsumer.as_asgi()),
+    re_path(r'ws/direct/id/(?P<public_id>[^/]+)/$', consumers.DirectChatConsumer.as_asgi()),
     re_path(r'ws/direct/(?P<username>[^/]+)/$', consumers.DirectChatConsumer.as_asgi()),
     re_path(r'ws/inbox/summary/$', consumers.InboxSummaryConsumer.as_asgi()),
 ]

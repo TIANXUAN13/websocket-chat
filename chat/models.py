@@ -63,6 +63,8 @@ class UserLocation(models.Model):
 class UserChatProfile(models.Model):
     """用户聊天外观配置"""
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='chat_profile')
+    public_id = models.CharField(max_length=12, unique=True, blank=True, default='', verbose_name='公开用户ID')
+    display_name = models.CharField(max_length=40, blank=True, default='', verbose_name='展示名称')
     friend_id = models.CharField(
         max_length=11,
         unique=True,
@@ -107,6 +109,8 @@ class UserChatProfile(models.Model):
         return ''
 
     def save(self, *args, **kwargs):
+        if not self.public_id:
+            self.public_id = self.generate_unique_public_id(exclude_user_id=self.user_id)
         if not self.friend_id:
             self.friend_id = self.generate_unique_friend_id(self.user.username, exclude_user_id=self.user_id)
         super().save(*args, **kwargs)
@@ -123,6 +127,19 @@ class UserChatProfile(models.Model):
         if len(normalized) < 8:
             normalized = f'{normalized}{"12345678"[:8-len(normalized)]}'
         return normalized
+
+    @classmethod
+    def generate_unique_public_id(cls, exclude_user_id=None):
+        queryset = cls.objects.all()
+        if exclude_user_id:
+            queryset = queryset.exclude(user_id=exclude_user_id)
+
+        alphabet = '23456789abcdefghjkmnpqrstuvwxyz'
+        generator = random.SystemRandom()
+        candidate = ''.join(generator.choice(alphabet) for _ in range(12))
+        while queryset.filter(public_id=candidate).exists():
+            candidate = ''.join(generator.choice(alphabet) for _ in range(12))
+        return candidate
 
     @classmethod
     def generate_unique_friend_id(cls, username, exclude_user_id=None):
@@ -149,17 +166,22 @@ class UserChatProfile(models.Model):
         if label:
             return label[:6]
 
-        username = (self.user.username or '').strip()
-        if not username:
+        display_name = self.get_display_name()
+        if not display_name:
             return '用户'
-        if any('\u4e00' <= char <= '\u9fff' for char in username):
-            return username[:2]
-        return username[:2].upper()
+        if any('\u4e00' <= char <= '\u9fff' for char in display_name):
+            return display_name[:2]
+        return display_name[:2].upper()
+
+    def get_display_name(self):
+        return (self.display_name or '').strip() or (self.user.username or '').strip() or '用户'
 
     def to_payload(self):
         theme = self.get_theme_config()
         style = self.get_style_config()
         return {
+            'public_id': self.public_id,
+            'display_name': self.get_display_name(),
             'friend_id': self.friend_id,
             'avatar_label': self.get_avatar_label(),
             'avatar_url': self.avatar_url,
@@ -191,6 +213,21 @@ class UserEmoji(models.Model):
 
     def __str__(self):
         return self.title or f'{self.user.username} emoji {self.pk}'
+
+
+class UsernameAlias(models.Model):
+    """用户名历史别名，用于旧链接跳转到当前用户名"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='username_aliases')
+    username = models.CharField(max_length=150, unique=True, verbose_name='历史用户名')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = '用户名别名'
+        verbose_name_plural = '用户名别名'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.username} -> {self.user.username}"
 
 
 class Room(models.Model):
@@ -511,6 +548,7 @@ class SiteConfiguration(models.Model):
     trusted_origins = models.TextField(blank=True, default='', verbose_name='CSRF 受信任来源')
     cors_allowed_origins = models.TextField(blank=True, default='', verbose_name='CORS 允许来源')
     allow_all_cors = models.BooleanField(default=False, verbose_name='允许全部跨域来源')
+    chat_attachment_max_mb = models.PositiveIntegerField(default=50, verbose_name='聊天附件大小上限(MB)')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 
     class Meta:
@@ -542,3 +580,7 @@ class SiteConfiguration(models.Model):
         if self.site_favicon:
             return self.site_favicon.url
         return ''
+
+    @property
+    def chat_attachment_max_bytes(self):
+        return max(1, int(self.chat_attachment_max_mb or 50)) * 1024 * 1024
