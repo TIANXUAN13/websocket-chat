@@ -320,29 +320,36 @@
                     </button>
                 </div>
                 <div class="chat-emoji-panel" id="direct-emoji-panel" hidden>
-                    <div class="emoji-panel-head">
-                        <strong>常用表情</strong>
-                        <span>点一下就能插入到输入框</span>
+                    <div class="emoji-panel-tabs">
+                        <button class="emoji-panel-tab active" type="button" data-emoji-tab="builtin">小表情</button>
+                        <button class="emoji-panel-tab" type="button" data-emoji-tab="custom">收藏表情</button>
                     </div>
-                    <div class="emoji-grid">
-                        {% for emoji in builtin_emojis %}
-                            <button class="emoji-chip" type="button" data-emoji="{{ emoji }}">{{ emoji }}</button>
-                        {% endfor %}
-                    </div>
-                    <div class="emoji-panel-head">
-                        <strong>图片表情</strong>
-                        <span>上传的和收藏的都放在这里</span>
-                        <button class="emoji-upload-btn" type="button" id="direct-emoji-upload-trigger">上传表情</button>
-                    </div>
-                    <div class="emoji-media-grid" id="direct-emoji-grid">
-                        {% for item in user_emojis %}
-                            <button class="emoji-media-chip" type="button" data-emoji-id="{{ item.id }}" title="{{ item.title|default:'图片表情' }}">
-                                <img src="{{ item.image.url }}" alt="{{ item.title|default:'图片表情' }}">
-                            </button>
-                        {% empty %}
-                            <div class="emoji-empty">还没有图片表情，先上传一张或者收藏聊天图片。</div>
-                        {% endfor %}
-                    </div>
+                    <section class="emoji-panel-view" data-emoji-section="builtin">
+                        <div class="emoji-panel-head">
+                            <strong>常用表情</strong>
+                            <span>点一下就能插入到输入框</span>
+                        </div>
+                        <div class="emoji-grid">
+                            {% for emoji in builtin_emojis %}
+                                <button class="emoji-chip" type="button" data-emoji="{{ emoji }}">{{ emoji }}</button>
+                            {% endfor %}
+                        </div>
+                    </section>
+                    <section class="emoji-panel-view" data-emoji-section="custom" hidden>
+                        <div class="emoji-panel-head">
+                            <strong>收藏表情</strong>
+                            <button class="emoji-upload-btn" type="button" id="direct-emoji-upload-trigger">上传表情</button>
+                        </div>
+                        <div class="emoji-media-grid" id="direct-emoji-grid">
+                            {% for item in user_emojis %}
+                                <button class="emoji-media-chip" type="button" data-emoji-id="{{ item.id }}" title="{{ item.title|default:'图片表情' }}">
+                                    <img src="{{ item.image.url }}" alt="{{ item.title|default:'图片表情' }}">
+                                </button>
+                            {% empty %}
+                                <div class="emoji-empty">还没有收藏表情，先上传一张或者收藏聊天图片。</div>
+                            {% endfor %}
+                        </div>
+                    </section>
                 </div>
             </form>
         </section>
@@ -393,6 +400,7 @@
         const directEmojiGrid = document.getElementById('direct-emoji-grid');
         const directEmojiUploadTrigger = document.getElementById('direct-emoji-upload-trigger');
         const directEmojiUploadInput = document.getElementById('direct-emoji-upload-input');
+        const directEmojiTabs = Array.from(document.querySelectorAll('#direct-emoji-panel .emoji-panel-tab'));
         const directMessageContextMenu = document.getElementById('direct-message-context-menu');
         const currentUsername = '{{ user.username }}';
         const otherUsername = {{ other_username_json }};
@@ -891,6 +899,15 @@
             }
         }
 
+        function switchDirectEmojiTab(tabName) {
+            directEmojiTabs.forEach((tab) => {
+                tab.classList.toggle('active', tab.dataset.emojiTab === tabName);
+            });
+            document.querySelectorAll('#direct-emoji-panel [data-emoji-section]').forEach((section) => {
+                section.hidden = section.dataset.emojiSection !== tabName;
+            });
+        }
+
         function insertDirectEmojiText(emoji) {
             if (!directMessageInput || !emoji) return;
             const start = directMessageInput.selectionStart ?? directMessageInput.value.length;
@@ -942,9 +959,7 @@
             if (!response.ok || !payload.ok) {
                 throw new Error(payload.error || 'emoji_send_failed');
             }
-            if (!directSocket || directSocket.readyState !== WebSocket.OPEN) {
-                appendDirectMessage(payload.message);
-            }
+            appendDirectMessage(payload.message);
             showDirectToast('图片表情已发出');
         }
 
@@ -1064,6 +1079,7 @@
             const messageElement = event.target.closest('.message');
             if (imageLink && messageElement) {
                 event.preventDefault();
+                event.stopPropagation();
                 const rect = imageLink.getBoundingClientRect();
                 showDirectContextMenuAt(
                     messageElement,
@@ -1095,10 +1111,16 @@
         });
 
         if (directAttachmentTrigger) {
-            directAttachmentTrigger.addEventListener('click', () => toggleDirectAttachmentPanel());
+            directAttachmentTrigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleDirectAttachmentPanel();
+            });
         }
         if (directEmojiTrigger) {
-            directEmojiTrigger.addEventListener('click', () => toggleDirectEmojiPanel());
+            directEmojiTrigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleDirectEmojiPanel();
+            });
         }
 
         if (directAttachmentPanel) {
@@ -1136,6 +1158,10 @@
                 }
             });
         }
+
+        directEmojiTabs.forEach((tab) => {
+            tab.addEventListener('click', () => switchDirectEmojiTab(tab.dataset.emojiTab || 'builtin'));
+        });
 
         if (directEmojiUploadTrigger) {
             directEmojiUploadTrigger.addEventListener('click', () => directEmojiUploadInput?.click());
@@ -1206,6 +1232,7 @@
 
         connectDirectSocket();
         requestPreciseLocation();
+        switchDirectEmojiTab('builtin');
         scrollDirectMessagesToBottom();
         markDirectAsRead();
         const latestDirectMessageElement = Array.from(directMessageList.querySelectorAll('.message')).pop();

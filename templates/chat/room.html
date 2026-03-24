@@ -494,29 +494,36 @@
                     </button>
                 </div>
                 <div class="chat-emoji-panel" id="room-emoji-panel" hidden>
-                    <div class="emoji-panel-head">
-                        <strong>常用表情</strong>
-                        <span>点一下直接插入输入框</span>
+                    <div class="emoji-panel-tabs">
+                        <button class="emoji-panel-tab active" type="button" data-emoji-tab="builtin">小表情</button>
+                        <button class="emoji-panel-tab" type="button" data-emoji-tab="custom">收藏表情</button>
                     </div>
-                    <div class="emoji-grid">
-                        {% for emoji in builtin_emojis %}
-                            <button class="emoji-chip" type="button" data-emoji="{{ emoji }}">{{ emoji }}</button>
-                        {% endfor %}
-                    </div>
-                    <div class="emoji-panel-head">
-                        <strong>图片表情</strong>
-                        <span>上传和收藏都合并显示</span>
-                        <button class="emoji-upload-btn" type="button" id="room-emoji-upload-trigger">上传表情</button>
-                    </div>
-                    <div class="emoji-media-grid" id="room-emoji-grid">
-                        {% for item in user_emojis %}
-                            <button class="emoji-media-chip" type="button" data-emoji-id="{{ item.id }}" title="{{ item.title|default:'图片表情' }}">
-                                <img src="{{ item.image.url }}" alt="{{ item.title|default:'图片表情' }}">
-                            </button>
-                        {% empty %}
-                            <div class="emoji-empty">还没有图片表情，先上传一张或者收藏聊天图片。</div>
-                        {% endfor %}
-                    </div>
+                    <section class="emoji-panel-view" data-emoji-section="builtin">
+                        <div class="emoji-panel-head">
+                            <strong>常用表情</strong>
+                            <span>点一下直接插入输入框</span>
+                        </div>
+                        <div class="emoji-grid">
+                            {% for emoji in builtin_emojis %}
+                                <button class="emoji-chip" type="button" data-emoji="{{ emoji }}">{{ emoji }}</button>
+                            {% endfor %}
+                        </div>
+                    </section>
+                    <section class="emoji-panel-view" data-emoji-section="custom" hidden>
+                        <div class="emoji-panel-head">
+                            <strong>收藏表情</strong>
+                            <button class="emoji-upload-btn" type="button" id="room-emoji-upload-trigger">上传表情</button>
+                        </div>
+                        <div class="emoji-media-grid" id="room-emoji-grid">
+                            {% for item in user_emojis %}
+                                <button class="emoji-media-chip" type="button" data-emoji-id="{{ item.id }}" title="{{ item.title|default:'图片表情' }}">
+                                    <img src="{{ item.image.url }}" alt="{{ item.title|default:'图片表情' }}">
+                                </button>
+                            {% empty %}
+                                <div class="emoji-empty">还没有收藏表情，先上传一张或者收藏聊天图片。</div>
+                            {% endfor %}
+                        </div>
+                    </section>
                 </div>
             </div>
         </section>
@@ -552,6 +559,7 @@
         const roomEmojiGrid = document.getElementById('room-emoji-grid');
         const roomEmojiUploadTrigger = document.getElementById('room-emoji-upload-trigger');
         const roomEmojiUploadInput = document.getElementById('room-emoji-upload-input');
+        const roomEmojiTabs = Array.from(document.querySelectorAll('#room-emoji-panel .emoji-panel-tab'));
         const messageContextMenu = document.getElementById('message-context-menu');
         const settingsDrawer = document.getElementById('room-settings-drawer');
         const settingsOverlay = document.getElementById('settings-overlay');
@@ -888,6 +896,15 @@
             if (shouldOpen) {
                 toggleRoomAttachmentPanel(false);
             }
+        }
+
+        function switchRoomEmojiTab(tabName) {
+            roomEmojiTabs.forEach((tab) => {
+                tab.classList.toggle('active', tab.dataset.emojiTab === tabName);
+            });
+            document.querySelectorAll('#room-emoji-panel [data-emoji-section]').forEach((section) => {
+                section.hidden = section.dataset.emojiSection !== tabName;
+            });
         }
 
         function insertRoomEmojiText(emoji) {
@@ -1484,6 +1501,7 @@
             const messageElement = event.target.closest('.message');
             if (imageLink && messageElement) {
                 event.preventDefault();
+                event.stopPropagation();
                 const rect = imageLink.getBoundingClientRect();
                 showRoomContextMenuAt(
                     messageElement,
@@ -1697,10 +1715,16 @@
         loadMoreBtn.addEventListener('click', loadMoreHistory);
 
         if (roomAttachmentTrigger) {
-            roomAttachmentTrigger.addEventListener('click', () => toggleRoomAttachmentPanel());
+            roomAttachmentTrigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleRoomAttachmentPanel();
+            });
         }
         if (roomEmojiTrigger) {
-            roomEmojiTrigger.addEventListener('click', () => toggleRoomEmojiPanel());
+            roomEmojiTrigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleRoomEmojiPanel();
+            });
         }
 
         if (roomAttachmentPanel) {
@@ -1738,6 +1762,10 @@
                 }
             });
         }
+
+        roomEmojiTabs.forEach((tab) => {
+            tab.addEventListener('click', () => switchRoomEmojiTab(tab.dataset.emojiTab || 'builtin'));
+        });
 
         if (roomEmojiUploadTrigger) {
             roomEmojiUploadTrigger.addEventListener('click', () => roomEmojiUploadInput?.click());
@@ -1803,6 +1831,7 @@
 
         connectRoomSocket();
         requestPreciseLocation();
+        switchRoomEmojiTab('builtin');
         markRoomAsRead();
         updateUserList(currentOnlineUsers);
         if (isRemovedFromRoom) {
