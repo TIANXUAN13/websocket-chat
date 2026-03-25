@@ -124,6 +124,45 @@ DB_PORT=5432 \
 scripts/migrate_sqlite_to_postgres.py
 ```
 
+## 打包 / 恢复头像与媒体文件
+
+数据库迁移只会迁移表里的路径，不会自动带走这些实际文件：
+
+- 用户头像
+- 群头像
+- 聊天图片
+- 聊天文件
+- 收藏图片表情
+- 站点图标等 `media/` 下的文件
+
+所以在从 SQLite 切到 PostgreSQL，或者从一台机器迁到另一台机器时，建议把 `media/` 一起打包。
+
+打包命令：
+
+```bash
+./.venv/bin/python scripts/media_bundle.py pack
+```
+
+默认会生成类似：
+
+```text
+backups/media_bundle_20260325_230000.tar.gz
+```
+
+恢复命令：
+
+```bash
+./.venv/bin/python scripts/media_bundle.py restore \
+  --archive backups/media_bundle_20260325_230000.tar.gz \
+  --replace
+```
+
+脚本位置：
+
+```text
+scripts/media_bundle.py
+```
+
 `start.sh` 仍然保留，等价于执行 `./start_mac.sh`。
 
 ## Linux 持续运行部署
