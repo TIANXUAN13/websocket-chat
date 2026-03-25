@@ -335,10 +335,21 @@ def make_context(defaults: dict[str, str], error: str = "") -> dict[str, str]:
     }
 
 
-def find_free_port() -> int:
+def find_free_port(bind_host: str) -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
+        sock.bind((bind_host, 0))
         return int(sock.getsockname()[1])
+
+
+def detect_local_ip() -> str:
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("8.8.8.8", 80))
+        return str(probe.getsockname()[0])
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        probe.close()
 
 
 def main() -> int:
@@ -352,6 +363,7 @@ def main() -> int:
     parser.add_argument("--db-host", default="127.0.0.1")
     parser.add_argument("--db-port", default="5432")
     parser.add_argument("--db-sslmode", default="disable")
+    parser.add_argument("--wizard-host", default="0.0.0.0")
     args = parser.parse_args()
 
     config_path = Path(args.config_file)
@@ -441,18 +453,23 @@ def main() -> int:
             self.end_headers()
             self.wfile.write(encoded)
 
-    port = find_free_port()
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    bind_host = args.wizard_host or "0.0.0.0"
+    port = find_free_port(bind_host)
+    server = ThreadingHTTPServer((bind_host, port), Handler)
     state["server"] = server
-    url = f"http://127.0.0.1:{port}/"
+    local_ip = detect_local_ip()
+    browser_url = f"http://127.0.0.1:{port}/"
+    access_url = f"http://{local_ip}:{port}/" if bind_host == "0.0.0.0" else f"http://{bind_host}:{port}/"
 
     print("")
     print("首次启动需要先选择数据库。")
-    print(f"请在浏览器打开：{url}")
+    print(f"请在浏览器打开：{access_url}")
+    if access_url != browser_url:
+        print(f"本机也可以访问：{browser_url}")
     print("保存后终端会继续启动项目。")
     print("")
 
-    threading.Thread(target=lambda: (time.sleep(0.3), webbrowser.open(url)), daemon=True).start()
+    threading.Thread(target=lambda: (time.sleep(0.3), webbrowser.open(browser_url)), daemon=True).start()
     server.serve_forever()
 
     if not state["saved"]:
