@@ -1240,7 +1240,7 @@
                 }
                 html += `</div>`;
                 html += `</div>`;
-                html += `<div class="message-bubble">`;
+                html += `<div class="message-bubble${data.attachment?.kind === 'image' && !parsedMessage.body && !parsedMessage.fullText ? ' image-only-bubble' : ''}">`;
                 html += renderMessageContent(parsedMessage);
                 html += renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id });
                 html += `</div>`;
@@ -1280,7 +1280,7 @@
                                 <div class="msg-user">${escapeHtml(myAppearance.display_name || username)}</div>
                             </div>
                         </div>
-                        <div class="message-bubble">
+                        <div class="message-bubble${isImage ? ' image-only-bubble' : ''}">
                             ${isImage ? `
                                 <div class="chat-attachment-stack">
                                     <img class="upload-preview-image" src="${previewUrl}" alt="${fileName}">

@@ -169,7 +169,7 @@
                                             <div class="msg-user">{{ item.sender.chat_profile.get_display_name }}</div>
                                         </div>
                                     </div>
-                                    <div class="message-bubble">
+                                    <div class="message-bubble{% if item.attachment and item.attachment_type == 'image' and not item.content %} image-only-bubble{% endif %}">
                                         {% if item.content %}
                                             <div class="msg-text">{{ item.content }}</div>
                                         {% endif %}
@@ -761,7 +761,7 @@
                                 <div class="msg-user">${escapeHtml(data.display_name || data.user)}</div>
                             </div>
                         </div>
-                        <div class="message-bubble">
+                        <div class="message-bubble${data.attachment?.kind === 'image' && !parsedMessage.body && !parsedMessage.fullText ? ' image-only-bubble' : ''}">
                             ${renderMessageContent(parsedMessage)}
                             ${renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id })}
                         </div>
@@ -799,7 +799,7 @@
                                 <div class="msg-user">${escapeHtml(myAppearance.display_name || currentUsername)}</div>
                             </div>
                         </div>
-                        <div class="message-bubble">
+                        <div class="message-bubble${isImage ? ' image-only-bubble' : ''}">
                             ${isImage ? `
                                 <div class="chat-attachment-stack">
                                     <img class="upload-preview-image" src="${previewUrl}" alt="${fileName}">

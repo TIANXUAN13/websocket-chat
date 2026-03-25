@@ -3385,6 +3385,18 @@ select.form-input {
     margin-top: 2px;
 }
 
+.message-bubble.image-only-bubble {
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+}
+
+.message-bubble.image-only-bubble .chat-attachment {
+    margin-top: 0;
+}
+
 .direct-chat-layout {
     grid-template-columns: 300px minmax(0, 1fr);
 }
@@ -5403,13 +5415,13 @@ code {
 
     .emoji-grid {
         gap: 6px;
-        max-height: 78px;
+        max-height: 86px;
     }
 
     .emoji-chip {
-        min-height: 36px;
+        min-height: 40px;
         border-radius: 12px;
-        font-size: 1rem;
+        font-size: 1.08rem;
     }
 
     .room-settings-drawer {
@@ -5561,6 +5573,10 @@ code {
     .message-bubble:has(.chat-attachment-image) .chat-attachment {
         margin-top: 0;
         gap: 0;
+    }
+
+    .message-bubble.image-only-bubble {
+        padding: 0;
     }
 
     .room-page:not(.embed-chat-page) .load-more-wrap {
@@ -6044,23 +6060,23 @@ code {
 
     .emoji-grid {
         gap: 5px;
-        max-height: 72px;
+        max-height: 84px;
     }
 
     .emoji-chip {
-        min-height: 34px;
+        min-height: 38px;
         border-radius: 10px;
-        font-size: 0.95rem;
+        font-size: 1.05rem;
     }
 
     .emoji-media-grid {
-        grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
         gap: 6px;
-        max-height: 102px;
+        max-height: 116px;
     }
 
     .emoji-media-chip {
-        border-radius: 12px;
+        border-radius: 13px;
     }
 
     .history-browser-main {
@@ -6091,13 +6107,13 @@ code {
     }
 
     .emoji-media-grid {
-        grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
         gap: 6px;
-        max-height: 92px;
+        max-height: 110px;
     }
 
     .emoji-media-chip {
-        border-radius: 11px;
+        border-radius: 12px;
     }
 
     .history-page-toolbar {
@@ -6154,6 +6170,10 @@ code {
     .message-bubble:has(.chat-attachment-image) .chat-attachment {
         margin-top: 0;
         gap: 0;
+    }
+
+    .message-bubble.image-only-bubble {
+        padding: 0;
     }
 
     .topbar,
