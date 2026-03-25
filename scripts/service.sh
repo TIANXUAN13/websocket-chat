@@ -28,6 +28,17 @@ BIGDATA_REVERSE_URL="${BIGDATA_REVERSE_URL:-https://api.bigdatacloud.net/data/re
 GEOCODE_USER_AGENT="${GEOCODE_USER_AGENT:-websocket-chat/1.0 (location reverse geocoding)}"
 REQUIREMENTS_STAMP="$PROJECT_DIR/$VENV_PATH/.requirements.installed"
 SELF_SCRIPT="$PROJECT_DIR/scripts/service.sh"
+DB_RUNTIME_CONFIG="${DB_RUNTIME_CONFIG:-$PROJECT_DIR/.runtime-db.env}"
+DB_SETUP_WIZARD="$PROJECT_DIR/scripts/db_setup_wizard.py"
+
+DB_BACKEND="${DB_BACKEND:-}"
+DB_NAME="${DB_NAME:-}"
+DB_USER="${DB_USER:-}"
+DB_PASSWORD="${DB_PASSWORD:-}"
+DB_HOST="${DB_HOST:-}"
+DB_PORT="${DB_PORT:-}"
+DB_SSLMODE="${DB_SSLMODE:-}"
+SQLITE_PATH="${SQLITE_PATH:-}"
 
 if [ "$(id -u)" -eq 0 ]; then
   SUDO_CMD=""
@@ -76,6 +87,70 @@ ensure_venv() {
   fi
 }
 
+escape_env_value() {
+  local value="${1:-}"
+  printf "%q" "$value"
+}
+
+load_db_runtime_config() {
+  if [ -f "$DB_RUNTIME_CONFIG" ]; then
+    # shellcheck disable=SC1090
+    source "$DB_RUNTIME_CONFIG"
+    export DB_BACKEND DB_NAME DB_USER DB_PASSWORD DB_HOST DB_PORT DB_SSLMODE SQLITE_PATH
+  fi
+}
+
+write_db_runtime_config() {
+  mkdir -p "$(dirname "$DB_RUNTIME_CONFIG")"
+  cat >"$DB_RUNTIME_CONFIG" <<EOF
+DB_BACKEND=$(escape_env_value "$DB_BACKEND")
+DB_NAME=$(escape_env_value "$DB_NAME")
+DB_USER=$(escape_env_value "$DB_USER")
+DB_PASSWORD=$(escape_env_value "$DB_PASSWORD")
+DB_HOST=$(escape_env_value "$DB_HOST")
+DB_PORT=$(escape_env_value "$DB_PORT")
+DB_SSLMODE=$(escape_env_value "$DB_SSLMODE")
+SQLITE_PATH=$(escape_env_value "$SQLITE_PATH")
+EOF
+}
+
+launch_db_setup_wizard() {
+  "$PYTHON_BIN" "$DB_SETUP_WIZARD" \
+    --config-file "$DB_RUNTIME_CONFIG" \
+    --project-dir "$PROJECT_DIR" \
+    --sqlite-path "${SQLITE_PATH:-$PROJECT_DIR/db.sqlite3}" \
+    --db-name "${DB_NAME:-websocket_chat}" \
+    --db-user "${DB_USER:-postgres}" \
+    --db-password "${DB_PASSWORD:-}" \
+    --db-host "${DB_HOST:-127.0.0.1}" \
+    --db-port "${DB_PORT:-5432}" \
+    --db-sslmode "${DB_SSLMODE:-disable}"
+  load_db_runtime_config
+}
+
+ensure_db_runtime_config() {
+  load_db_runtime_config
+
+  if [ -f "$DB_RUNTIME_CONFIG" ] && [ -n "$DB_BACKEND" ]; then
+    return
+  fi
+
+  if [ -n "$DB_BACKEND" ]; then
+    write_db_runtime_config
+    return
+  fi
+
+  if [ -t 0 ] && [ -t 1 ]; then
+    launch_db_setup_wizard
+    return
+  fi
+
+  DB_BACKEND="sqlite"
+  SQLITE_PATH="$PROJECT_DIR/db.sqlite3"
+  write_db_runtime_config
+  echo "未检测到交互终端，已默认使用 SQLite。"
+}
+
 requirements_changed() {
   if [ ! -f "$PROJECT_DIR/requirements.txt" ]; then
     echo "requirements.txt not found."
@@ -112,6 +187,7 @@ install_dependencies() {
 
 prepare_runtime() {
   ensure_venv
+  ensure_db_runtime_config
 
   if [ "$INSTALL_DEPS_ON_START" = "1" ]; then
     install_dependencies
@@ -160,6 +236,14 @@ AMAP_WEB_API_KEY=$AMAP_WEB_API_KEY
 REVERSE_GEOCODE_URL=$REVERSE_GEOCODE_URL
 BIGDATA_REVERSE_URL=$BIGDATA_REVERSE_URL
 GEOCODE_USER_AGENT=$GEOCODE_USER_AGENT
+DB_BACKEND=$DB_BACKEND
+DB_NAME=$DB_NAME
+DB_USER=$DB_USER
+DB_PASSWORD=$DB_PASSWORD
+DB_HOST=$DB_HOST
+DB_PORT=$DB_PORT
+DB_SSLMODE=$DB_SSLMODE
+SQLITE_PATH=$SQLITE_PATH
 EOF
 }
 
@@ -225,6 +309,7 @@ logs_service() {
 }
 
 show_config() {
+  ensure_db_runtime_config
   cat <<EOF
 Service name:          $SERVICE_NAME
 Project dir:           $PROJECT_DIR
@@ -242,6 +327,9 @@ Geocode timeout:       $GEOCODE_TIMEOUT
 AMap key:              ${AMAP_WEB_API_KEY:+configured}
 Reverse geocode URL:   $REVERSE_GEOCODE_URL
 Secondary geocode URL: $BIGDATA_REVERSE_URL
+Database backend:      ${DB_BACKEND:-sqlite}
+Database host/name:    ${DB_HOST:-local}/${DB_NAME:-${SQLITE_PATH:-db.sqlite3}}
+Runtime DB config:     $DB_RUNTIME_CONFIG
 EOF
 }
 
@@ -261,6 +349,7 @@ Commands:
   disable     Disable the service at boot
   logs        Tail service logs
   config      Show the resolved runtime configuration
+  db-reset    Delete the saved database choice so next start asks again
   uninstall   Stop, disable and remove the service
 
 Optional environment variables:
@@ -280,7 +369,13 @@ Optional environment variables:
   AMAP_WEB_API_KEY       Optional: 高德 Web 服务 Key，国内服务器建议配置
   REVERSE_GEOCODE_URL    Default: https://nominatim.openstreetmap.org/reverse
   BIGDATA_REVERSE_URL    Default: https://api.bigdatacloud.net/data/reverse-geocode-client
+  DB_RUNTIME_CONFIG      Default: .runtime-db.env in project root
 EOF
+}
+
+reset_db_runtime_config() {
+  rm -f "$DB_RUNTIME_CONFIG"
+  echo "已清除数据库选择。下次启动会重新询问。"
 }
 
 main() {
@@ -304,6 +399,9 @@ main() {
       ;;
     config)
       show_config
+      ;;
+    db-reset)
+      reset_db_runtime_config
       ;;
     uninstall)
       uninstall_service
