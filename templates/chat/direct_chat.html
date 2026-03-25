@@ -185,8 +185,8 @@
                                                 </a>
                                             {% endif %}
                                         {% endif %}
-                                        <div class="msg-time">{{ item.created_at|date:"H:i" }}</div>
                                     </div>
+                                    <div class="msg-time">{{ item.created_at|date:"H:i" }}</div>
                                 </div>
                             </div>
                         </div>
@@ -764,8 +764,8 @@
                         <div class="message-bubble">
                             ${renderMessageContent(parsedMessage)}
                             ${renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id })}
-                            <div class="msg-time">${timeStr}</div>
                         </div>
+                        <div class="msg-time">${timeStr}</div>
                     </div>
                 </div>
             `;
@@ -823,8 +823,8 @@
                                     <div class="upload-progress-bar"></div>
                                 </div>
                             </div>
-                            <div class="msg-time">${timeStr}</div>
                         </div>
+                        <div class="msg-time">${timeStr}</div>
                     </div>
                 </div>
             `;
@@ -1179,6 +1179,22 @@
                     rect.top + Math.min(rect.height - 24, 80),
                     rect
                 );
+                return;
+            }
+
+            if (
+                messageElement &&
+                !messageElement.classList.contains('system') &&
+                !messageElement.classList.contains('kick') &&
+                !messageElement.classList.contains('delete-room')
+            ) {
+                const nextVisible = !messageElement.classList.contains('time-visible');
+                directMessageList.querySelectorAll('.message.time-visible').forEach((node) => {
+                    if (node !== messageElement) {
+                        node.classList.remove('time-visible');
+                    }
+                });
+                messageElement.classList.toggle('time-visible', nextVisible);
             }
         });
 
@@ -1285,13 +1301,12 @@
                 messageElement.dataset.messageContent || '',
             ].join('|'));
             if (bubble) {
-                const timeNode = bubble.querySelector('.msg-time');
                 bubble.innerHTML = `${renderMessageContent(parsedMessage)}${renderAttachmentContent({
                     url: messageElement.querySelector('.chat-attachment')?.getAttribute('href') || '',
                     name: messageElement.dataset.attachmentName || '',
                     kind: messageElement.dataset.attachmentKind || '',
                     messageId: messageElement.dataset.messageId || '',
-                })}${timeNode ? timeNode.outerHTML : ''}`;
+                })}`;
             }
             applyAppearance(messageElement, isMine ? myAppearance : otherAppearance);
         });
@@ -1305,6 +1320,9 @@
             }
             if (!event.target.closest('.chat-emoji-shell') && !event.target.closest('.chat-emoji-panel')) {
                 toggleDirectEmojiPanel(false);
+            }
+            if (!event.target.closest('.message')) {
+                directMessageList.querySelectorAll('.message.time-visible').forEach((node) => node.classList.remove('time-visible'));
             }
         });
 

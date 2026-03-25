@@ -1243,8 +1243,8 @@
                 html += `<div class="message-bubble">`;
                 html += renderMessageContent(parsedMessage);
                 html += renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id });
-                html += `<div class="msg-time">${timeStr}</div>`;
                 html += `</div>`;
+                html += `<div class="msg-time">${timeStr}</div>`;
                 html += `</div>`;
             }
             msgDiv.innerHTML = html;
@@ -1304,8 +1304,8 @@
                                     <div class="upload-progress-bar"></div>
                                 </div>
                             </div>
-                            <div class="msg-time">${timeStr}</div>
                         </div>
+                        <div class="msg-time">${timeStr}</div>
                     </div>
                 </div>
             `;
@@ -1609,6 +1609,22 @@
                     rect.top + Math.min(rect.height - 24, 80),
                     rect
                 );
+                return;
+            }
+
+            if (
+                messageElement &&
+                !messageElement.classList.contains('system') &&
+                !messageElement.classList.contains('kick') &&
+                !messageElement.classList.contains('delete-room')
+            ) {
+                const nextVisible = !messageElement.classList.contains('time-visible');
+                messagesDiv.querySelectorAll('.message.time-visible').forEach((node) => {
+                    if (node !== messageElement) {
+                        node.classList.remove('time-visible');
+                    }
+                });
+                messageElement.classList.toggle('time-visible', nextVisible);
             }
         });
 
@@ -1896,6 +1912,9 @@
             }
             if (!event.target.closest('.chat-emoji-shell') && !event.target.closest('.chat-emoji-panel')) {
                 toggleRoomEmojiPanel(false);
+            }
+            if (!event.target.closest('.message')) {
+                messagesDiv.querySelectorAll('.message.time-visible').forEach((node) => node.classList.remove('time-visible'));
             }
             const actionTarget = event.target.closest('.avatar-action');
             if (!actionTarget) return;

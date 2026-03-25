@@ -391,10 +391,21 @@ def prepare_chat_attachment(uploaded_file, base_name):
     content_type = (getattr(uploaded_file, 'content_type', '') or '').lower()
     original_name = (getattr(uploaded_file, 'name', '') or base_name or 'file').strip() or 'file'
     size = getattr(uploaded_file, 'size', 0) or 0
+    normalized_extension = os.path.splitext(original_name)[1].lower()
 
     attachment_limit_bytes = get_chat_attachment_limit_bytes()
     if size > attachment_limit_bytes:
         raise ValueError(f'附件不能超过 {max(1, attachment_limit_bytes // (1024 * 1024))}MB')
+
+    if content_type == 'image/gif' or normalized_extension == '.gif':
+        uploaded_file.name = build_attachment_name(original_name, fallback='image')
+        return {
+            'file': uploaded_file,
+            'attachment_type': 'image',
+            'attachment_name': original_name,
+            'attachment_mime': 'image/gif',
+            'attachment_size': size,
+        }
 
     if content_type.startswith('image/'):
         optimized = optimize_chat_image_upload(uploaded_file, base_name)
