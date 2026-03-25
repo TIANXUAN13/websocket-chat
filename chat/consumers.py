@@ -63,7 +63,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }))
             return
 
-        await self.send_welcome()
         await self.broadcast_user_list()
 
     async def disconnect(self, code):
@@ -318,13 +317,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def delete_room_from_db(self):
         from .models import Room
         Room.objects.filter(name=self.room_name).delete()
-
-    async def send_welcome(self):
-        await self.send(text_data=json.dumps({
-            'type': 'system',
-            'message': f'欢迎来到房间 {self.room_name}！',
-            'user': 'System'
-        }))
 
     async def broadcast_user_list(self):
         users = await self.get_users_dict()

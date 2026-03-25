@@ -4344,6 +4344,12 @@ select.form-input {
     gap: 12px;
 }
 
+.history-mobile-title {
+    color: var(--text-strong);
+    font-size: 1.1rem;
+    font-weight: 800;
+}
+
 .history-browser-main {
     padding: 18px 20px;
     border-radius: 34px;
@@ -4376,6 +4382,7 @@ select.form-input {
 
 .history-panel {
     display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 14px;
     min-height: 0;
 }
@@ -4386,6 +4393,7 @@ select.form-input {
 
 .history-panels-shell {
     min-height: 0;
+    height: min(72vh, 820px);
     border-radius: 30px;
     background: linear-gradient(180deg, rgba(255, 253, 249, 0.98), rgba(252, 246, 238, 0.96));
     border: 1px solid rgba(104, 74, 52, 0.08);
@@ -4406,8 +4414,8 @@ select.form-input {
 }
 
 .history-column-list {
-    min-height: 240px;
-    height: min(66vh, 720px);
+    min-height: 0;
+    height: auto;
     overflow-y: auto;
     padding-right: 6px;
     gap: 10px;
@@ -4443,8 +4451,8 @@ select.form-input {
     justify-content: flex-start;
     gap: 10px;
     align-content: start;
-    height: min(66vh, 720px);
-    min-height: 240px;
+    height: auto;
+    min-height: 0;
     overflow-y: auto;
     padding-right: 6px;
     overscroll-behavior: contain;
@@ -4493,6 +4501,9 @@ select.form-input {
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(104, 74, 52, 0.08);
+    background: linear-gradient(180deg, rgba(255, 251, 246, 0), rgba(255, 251, 246, 0.96) 22%);
 }
 
 .history-column-page-text {
@@ -5118,35 +5129,104 @@ code {
         width: 100%;
     }
 
+    .history-page-header {
+        gap: 10px;
+        align-items: center;
+    }
+
+    .history-page-toolbar {
+        display: grid;
+        gap: 12px;
+    }
+
+    .history-page-toolbar > div:first-child {
+        min-width: 0;
+        display: grid;
+        gap: 10px;
+    }
+
+    .history-page-toolbar #history-panel-desc {
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .history-page-search-shell {
+        display: block;
+    }
+
+    .history-page-toolbar .subpanel-switch {
+        width: 100%;
+        overflow-x: auto;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        padding-bottom: 2px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .history-page-toolbar .subpanel-tab {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
     .history-browser-main {
-        padding: 18px;
-        border-radius: 28px;
+        padding: 16px;
+        border-radius: 30px;
+        overflow: visible;
     }
 
     .history-panels-shell {
         padding: 14px;
         border-radius: 24px;
+        height: auto;
+        overflow: visible;
     }
 
     .history-column-list {
-        min-height: 200px;
-        height: min(52vh, 520px);
+        height: auto;
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
     }
 
     .history-image-grid {
         grid-template-columns: repeat(auto-fill, 90px);
-        justify-content: space-between;
+        justify-content: flex-start;
         gap: 8px;
-        min-height: 200px;
-        height: min(52vh, 520px);
+        height: auto;
+        min-height: 0;
+        overflow: visible;
+        padding-right: 0;
+    }
+
+    .history-record-card {
+        padding: 12px 14px;
+        border-radius: 20px;
+    }
+
+    .history-record-card .history-browser-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 18px;
+    }
+
+    .history-record-copy strong {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+    .history-mobile-title {
+        font-size: 1.2rem;
     }
 
     .history-column-pagination {
         flex-wrap: wrap;
+        padding-top: 8px;
     }
 
     .history-column-pagination .btn {
-        flex: 1 1 140px;
+        flex: 1 1 calc(50% - 6px);
     }
 
     .friend-card {
@@ -5769,25 +5849,106 @@ code {
 }
 
 @media (max-width: 420px) {
+    .mobile-compact-shell .topbar {
+        padding: 10px 14px;
+        min-height: auto;
+    }
+
+    .mobile-compact-shell .topbar .topbar-group {
+        width: 100%;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .mobile-compact-shell .topbar .brand-title {
+        min-width: 0;
+    }
+
+    .mobile-compact-shell .topbar .brand-title strong {
+        font-size: 1rem;
+        line-height: 1.2;
+    }
+
+    .mobile-compact-shell .topbar .brand-title span {
+        display: none;
+    }
+
+    .mobile-compact-shell .topbar .back-link {
+        width: 42px;
+        height: 42px;
+        min-width: 42px;
+        padding: 0;
+        border-radius: 16px;
+    }
+
+    .mobile-compact-shell .topbar .back-link-label {
+        display: none;
+    }
+
+    .mobile-compact-shell .topbar .back-link svg {
+        width: 18px;
+        height: 18px;
+    }
+
     .history-browser-main {
         padding: 14px;
         border-radius: 24px;
+        overflow: visible;
     }
 
     .history-panels-shell {
         padding: 12px;
         border-radius: 20px;
+        height: auto;
+        overflow: visible;
     }
 
     .history-image-grid {
-        grid-template-columns: repeat(3, 1fr);
-        grid-auto-rows: auto;
+        grid-template-columns: repeat(3, 90px);
+        grid-auto-rows: 90px;
+        justify-content: space-between;
+        height: auto;
+        overflow: visible;
     }
 
     .history-image-card {
-        width: 100%;
-        height: auto;
-        aspect-ratio: 1 / 1;
+        width: 90px;
+        height: 90px;
+        aspect-ratio: auto;
+    }
+
+    .history-page-toolbar {
+        gap: 10px;
+    }
+
+    .history-page-toolbar .subpanel-tab {
+        padding: 8px 12px;
+    }
+
+    .history-page-toolbar #history-panel-desc {
+        display: none;
+    }
+
+    .history-page-search-shell .conversation-search-input,
+    .history-page-search-shell.open .conversation-search-input {
+        min-height: 46px;
+        border-radius: 18px;
+        font-size: 15px;
+    }
+
+    .history-record-card {
+        grid-template-columns: 56px minmax(0, 1fr);
+    }
+
+    .history-record-card .history-browser-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+    }
+
+    .history-mobile-title {
+        font-size: 1.05rem;
     }
 
     .topbar,

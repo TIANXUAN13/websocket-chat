@@ -23,23 +23,6 @@
                 <span>{{ history_description }}</span>
             </div>
         </div>
-        <div class="topbar-group">
-            <a href="{% url 'inbox' %}" class="settings-trigger settings-link" aria-label="消息中心">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path d="M4 6h16v12H4z"/>
-                    <path d="M4 10l6.5 5L17 10"/>
-                </svg>
-                {% if pending_friend_requests_count %}
-                    <span class="notification-badge">{{ pending_friend_requests_count }}</span>
-                {% endif %}
-            </a>
-            <a href="{% url 'profile_settings' %}?next={{ request.get_full_path|urlencode }}" class="settings-trigger settings-link" aria-label="个人设置">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path d="M12 3l1.6 2.76 3.12.68-.9 3.07 2.18 2.32-2.18 2.32.9 3.07-3.12.68L12 21l-1.6-2.76-3.12-.68.9-3.07L6 12.17l2.18-2.32-.9-3.07 3.12-.68L12 3z"/>
-                    <circle cx="12" cy="12" r="3.2"/>
-                </svg>
-            </a>
-        </div>
     </header>
     {% endif %}
 
@@ -60,14 +43,16 @@
         <section class="content-card panel-card content-card-feed history-page-shell">
     {% endif %}
             <section class="history-browser-main panel-card">
+                {% if embed_mode %}
                 <div class="history-page-header history-page-header-compact">
                     <a href="{{ history_back_url }}" class="btn btn-secondary back-link">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M19 12H5M12 19l-7-7 7-7"/>
                         </svg>
-                        <span class="back-link-label">{{ history_back_label }}</span>
                     </a>
+                    <strong class="history-mobile-title">{{ history_scope_label }}</strong>
                 </div>
+                {% endif %}
                 <div class="sidebar-heading sidebar-heading-search history-page-toolbar">
                     <div>
                         <div class="subpanel-switch" id="history-subpanel-switch">

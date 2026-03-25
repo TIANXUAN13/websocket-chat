@@ -1812,14 +1812,27 @@ def upload_direct_attachment(request, public_id):
 @login_required
 @require_POST
 def upload_user_emoji(request):
-    uploaded_file = request.FILES.get('file')
-    if not uploaded_file:
+    uploaded_files = request.FILES.getlist('files') or request.FILES.getlist('file')
+    if not uploaded_files:
+        single_file = request.FILES.get('file')
+        if single_file:
+            uploaded_files = [single_file]
+    if not uploaded_files:
         return JsonResponse({'ok': False, 'error': 'missing_file'}, status=400)
-    try:
-        emoji = create_user_emoji_from_upload(request.user, uploaded_file, request.POST.get('title', ''))
-    except ValueError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-    return JsonResponse({'ok': True, 'emoji': serialize_user_emoji(emoji)})
+    emojis = []
+    for uploaded_file in uploaded_files:
+        try:
+            emoji = create_user_emoji_from_upload(request.user, uploaded_file, request.POST.get('title', ''))
+        except ValueError as exc:
+            return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+        emojis.append(serialize_user_emoji(emoji))
+    response_payload = {
+        'ok': True,
+        'emojis': emojis,
+    }
+    if emojis:
+        response_payload['emoji'] = emojis[0]
+    return JsonResponse(response_payload)
 
 
 @login_required

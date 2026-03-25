@@ -233,7 +233,7 @@
                             <circle cx="15" cy="10" r="1"></circle>
                         </svg>
                     </button>
-                    <input type="file" id="direct-emoji-upload-input" accept="image/*" hidden>
+                    <input type="file" id="direct-emoji-upload-input" accept="image/*" multiple hidden>
                 </div>
                 <button class="btn btn-primary send-btn-compact" type="submit" id="direct-send-btn" aria-label="发送消息">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -990,10 +990,13 @@
             directEmojiGrid.prepend(chip);
         }
 
-        async function uploadDirectEmoji(file) {
-            if (!file) return;
+        async function uploadDirectEmoji(files) {
+            const uploadFiles = Array.from(files || []).filter(Boolean);
+            if (!uploadFiles.length) return [];
             const formData = new FormData();
-            formData.append('file', file);
+            uploadFiles.forEach((file) => {
+                formData.append('files', file);
+            });
             const response = await fetch(userEmojiUploadUrl, {
                 method: 'POST',
                 headers: { 'X-CSRFToken': csrfToken },
@@ -1004,7 +1007,11 @@
             if (!response.ok || !payload.ok) {
                 throw new Error(payload.error || 'emoji_upload_failed');
             }
-            appendDirectEmojiChip(payload.emoji);
+            const emojis = Array.isArray(payload.emojis) && payload.emojis.length
+                ? payload.emojis
+                : (payload.emoji ? [payload.emoji] : []);
+            emojis.forEach(appendDirectEmojiChip);
+            return emojis;
         }
 
         async function sendDirectEmoji(emojiId) {
@@ -1254,10 +1261,12 @@
 
         if (directEmojiUploadInput) {
             directEmojiUploadInput.addEventListener('change', async (event) => {
-                const [file] = event.target.files || [];
+                const files = Array.from(event.target.files || []);
                 try {
-                    await uploadDirectEmoji(file);
-                    showDirectToast('图片表情已上传');
+                    const uploaded = await uploadDirectEmoji(files);
+                    if (uploaded.length) {
+                        showDirectToast(uploaded.length > 1 ? `已上传 ${uploaded.length} 张图片表情` : '图片表情已上传');
+                    }
                 } catch (error) {
                     showDirectToast(error.message === '表情只支持图片格式' ? error.message : '上传表情失败，请稍后再试', true);
                 } finally {
