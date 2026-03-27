@@ -392,6 +392,7 @@ class Message(models.Model):
     message = models.TextField(verbose_name='消息内容', blank=True, default='')
     message_type = models.CharField(max_length=20, default='chat', verbose_name='消息类型')
     attachment = models.FileField(upload_to='chat_attachments/rooms/%Y/%m/', blank=True, null=True, verbose_name='附件')
+    attachment_thumbnail = models.ImageField(upload_to='chat_attachments/rooms/%Y/%m/thumbs/', blank=True, null=True, verbose_name='附件缩略图')
     attachment_type = models.CharField(
         max_length=20,
         choices=ATTACHMENT_TYPE_CHOICES,
@@ -509,6 +510,7 @@ class DirectMessage(models.Model):
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='direct_messages_sent')
     content = models.TextField(verbose_name='消息内容', blank=True, default='')
     attachment = models.FileField(upload_to='chat_attachments/direct/%Y/%m/', blank=True, null=True, verbose_name='附件')
+    attachment_thumbnail = models.ImageField(upload_to='chat_attachments/direct/%Y/%m/thumbs/', blank=True, null=True, verbose_name='附件缩略图')
     attachment_type = models.CharField(
         max_length=20,
         choices=ATTACHMENT_TYPE_CHOICES,

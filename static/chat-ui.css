@@ -3156,6 +3156,64 @@ select.form-input {
     box-shadow: 0 10px 20px rgba(59, 39, 24, 0.12);
 }
 
+.video-attachment-preview {
+    display: grid;
+    gap: 10px;
+    min-width: min(320px, 62vw);
+    padding: 16px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(32, 24, 19, 0.96), rgba(60, 44, 32, 0.92));
+    color: #fff6ef;
+    box-shadow: 0 10px 20px rgba(59, 39, 24, 0.16);
+}
+
+.video-attachment-trigger {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+    justify-items: start;
+    text-align: left;
+    cursor: pointer;
+}
+
+.video-attachment-thumb {
+    width: 100%;
+    max-width: min(320px, 62vw);
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 14px;
+    display: block;
+}
+
+.video-attachment-play {
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.video-attachment-play svg {
+    width: 24px;
+    height: 24px;
+}
+
+.video-attachment-trigger strong {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.video-attachment-trigger span {
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(255, 246, 239, 0.76);
+}
+
 .chat-emoji-save {
     justify-self: start;
     border: 0;
@@ -5125,6 +5183,10 @@ code {
 }
 
 @media (max-width: 720px) {
+    .chat-attachment-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .camera-capture-modal {
         padding: 12px;
     }

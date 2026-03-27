@@ -4,6 +4,11 @@ import io
 import mimetypes
 import os
 import re
+import shutil
+import subprocess
+import tempfile
+from datetime import timedelta
+from pathlib import Path
 from urllib.parse import quote, urlencode
 
 # chat/views.py
@@ -115,6 +120,8 @@ def get_thread_preview_text(message_text, limit=36):
 def get_attachment_preview_label(kind, name=''):
     if kind == 'image':
         return f'[图片] {name}'.strip()
+    if kind == 'video':
+        return f'[视频] {name}'.strip()
     if kind == 'file':
         return f'[文件] {name}'.strip()
     return (name or '').strip()
@@ -445,13 +452,63 @@ def build_attachment_payload(message_obj):
         attachment_url = message_obj.attachment.url
     except ValueError:
         return None
+    thumbnail_url = ''
+    thumbnail_field = getattr(message_obj, 'attachment_thumbnail', None)
+    if thumbnail_field:
+        try:
+            thumbnail_url = thumbnail_field.url
+        except ValueError:
+            thumbnail_url = ''
     return {
         'url': attachment_url,
         'name': getattr(message_obj, 'attachment_name', '') or os.path.basename(message_obj.attachment.name),
         'mime': getattr(message_obj, 'attachment_mime', '') or '',
         'size': getattr(message_obj, 'attachment_size', 0) or 0,
         'kind': getattr(message_obj, 'attachment_type', 'file') or 'file',
+        'thumbnail_url': thumbnail_url,
     }
+
+
+def try_generate_video_thumbnail(uploaded_field_file, fallback_name='video'):
+    if not uploaded_field_file:
+        return None
+    ffmpeg_path = shutil.which('ffmpeg')
+    if not ffmpeg_path:
+        return None
+
+    source_path = getattr(uploaded_field_file, 'path', '')
+    if not source_path or not os.path.exists(source_path):
+        return None
+
+    temp_fd, temp_output = tempfile.mkstemp(prefix='video_thumb_', suffix='.jpg')
+    os.close(temp_fd)
+    try:
+        command = [
+            ffmpeg_path,
+            '-y',
+            '-ss',
+            '00:00:00.200',
+            '-i',
+            source_path,
+            '-frames:v',
+            '1',
+            '-vf',
+            'scale=720:-1',
+            temp_output,
+        ]
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if not os.path.exists(temp_output) or os.path.getsize(temp_output) == 0:
+            return None
+        safe_name = build_attachment_name(Path(fallback_name).stem or 'video', fallback='video_thumb')
+        with open(temp_output, 'rb') as fh:
+            return ContentFile(fh.read(), name=f'{Path(safe_name).stem}.jpg')
+    except (OSError, subprocess.SubprocessError):
+        return None
+    finally:
+        try:
+            os.remove(temp_output)
+        except OSError:
+            pass
 
 
 def create_user_emoji_from_upload(user, uploaded_file, title=''):
@@ -505,7 +562,7 @@ def serialize_room_message_payload(message_obj, appearance):
 def serialize_direct_message_payload(message_obj, appearance):
     return {
         'id': message_obj.id,
-        'type': 'chat',
+        'type': getattr(message_obj, 'message_type', 'chat') or 'chat',
         'message': message_obj.content,
         'user': message_obj.sender.username,
         'public_id': appearance.get('public_id', ''),
@@ -516,6 +573,46 @@ def serialize_direct_message_payload(message_obj, appearance):
         'appearance': appearance,
         'attachment': build_attachment_payload(message_obj),
     }
+
+
+def can_recall_message(created_at):
+    if not created_at:
+        return False
+    return created_at >= timezone.now() - timedelta(minutes=5)
+
+
+def build_room_message_delete_payload(message_id):
+    return {
+        'type': 'message_deleted',
+        'id': message_id,
+    }
+
+
+def build_direct_message_delete_payload(message_id):
+    return {
+        'type': 'message_deleted',
+        'id': message_id,
+    }
+
+
+def notify_room_message_event(room_name, payload):
+    from .consumers import ChatConsumer
+
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        ChatConsumer.build_group_name(room_name),
+        {'type': 'chat_message', 'payload': payload},
+    )
+
+
+def notify_direct_message_event(user_a_id, user_b_id, payload):
+    from .consumers import DirectChatConsumer
+
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        DirectChatConsumer.build_group_name(user_a_id, user_b_id),
+        {'type': 'direct_message_event', 'payload': payload},
+    )
 
 
 def build_history_entry(item, text_attr):
@@ -1765,6 +1862,10 @@ def upload_room_attachment(request, room_name):
         attachment_size=attachment_data['attachment_size'],
     )
     message.attachment.save(attachment_data['file'].name, attachment_data['file'], save=False)
+    if attachment_data['attachment_type'] == 'video':
+        thumbnail_file = try_generate_video_thumbnail(message.attachment, attachment_data['attachment_name'])
+        if thumbnail_file:
+            message.attachment_thumbnail.save(thumbnail_file.name, thumbnail_file, save=False)
     message.save()
 
     payload = serialize_room_message_payload(message, profile.to_payload())
@@ -1813,6 +1914,10 @@ def upload_direct_attachment(request, public_id):
         attachment_size=attachment_data['attachment_size'],
     )
     message.attachment.save(attachment_data['file'].name, attachment_data['file'], save=False)
+    if attachment_data['attachment_type'] == 'video':
+        thumbnail_file = try_generate_video_thumbnail(message.attachment, attachment_data['attachment_name'])
+        if thumbnail_file:
+            message.attachment_thumbnail.save(thumbnail_file.name, thumbnail_file, save=False)
     message.save()
 
     profile = get_or_create_chat_profile(request.user)
@@ -1828,6 +1933,129 @@ def upload_direct_attachment(request, public_id):
         }
     )
     return JsonResponse({'ok': True, 'message': payload})
+
+
+@login_required
+@require_POST
+def recall_room_message(request, room_name, message_id):
+    try:
+        room = Room.objects.get(name=room_name)
+        message = Message.objects.select_related('user').get(pk=message_id, room=room)
+    except (Room.DoesNotExist, Message.DoesNotExist):
+        return JsonResponse({'ok': False, 'error': 'message_not_found'}, status=404)
+
+    membership = get_room_membership(room, request.user)
+    if room.created_by != request.user and not (membership and membership.is_active):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if message.user_id != request.user.id:
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if not can_recall_message(message.timestamp):
+        return JsonResponse({'ok': False, 'error': 'recall_window_expired'}, status=400)
+
+    if message.attachment:
+        message.attachment.delete(save=False)
+    message.message = '撤回了一条消息'
+    message.message_type = 'chat'
+    message.attachment = None
+    message.attachment_type = 'text'
+    message.attachment_name = ''
+    message.attachment_mime = ''
+    message.attachment_size = 0
+    message.save(update_fields=['message', 'message_type', 'attachment', 'attachment_type', 'attachment_name', 'attachment_mime', 'attachment_size'])
+
+    appearance = get_or_create_chat_profile(request.user).to_payload()
+    payload = serialize_room_message_payload(message, appearance)
+    payload['type'] = 'message_updated'
+    notify_room_message_event(room.name, payload)
+    return JsonResponse({'ok': True, 'message': payload})
+
+
+@login_required
+@require_POST
+def delete_room_message(request, room_name, message_id):
+    try:
+        room = Room.objects.get(name=room_name)
+        message = Message.objects.select_related('user').get(pk=message_id, room=room)
+    except (Room.DoesNotExist, Message.DoesNotExist):
+        return JsonResponse({'ok': False, 'error': 'message_not_found'}, status=404)
+
+    membership = get_room_membership(room, request.user)
+    if room.created_by != request.user and not (membership and membership.is_active):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if message.user_id != request.user.id:
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+
+    if message.attachment:
+        message.attachment.delete(save=False)
+    deleted_id = message.id
+    message.delete()
+    payload = build_room_message_delete_payload(deleted_id)
+    notify_room_message_event(room.name, payload)
+    return JsonResponse({'ok': True, 'id': deleted_id})
+
+
+@login_required
+@require_POST
+def recall_direct_message(request, public_id, message_id):
+    try:
+        other_user = resolve_user_by_public_id(public_id)
+    except User.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
+    if other_user == request.user or not are_friends(request.user, other_user):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+
+    conversation = get_or_create_direct_conversation(request.user, other_user)
+    try:
+        message = DirectMessage.objects.select_related('sender').get(pk=message_id, conversation=conversation)
+    except DirectMessage.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'message_not_found'}, status=404)
+    if message.sender_id != request.user.id:
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if not can_recall_message(message.created_at):
+        return JsonResponse({'ok': False, 'error': 'recall_window_expired'}, status=400)
+
+    if message.attachment:
+        message.attachment.delete(save=False)
+    message.content = '撤回了一条消息'
+    message.attachment = None
+    message.attachment_type = 'text'
+    message.attachment_name = ''
+    message.attachment_mime = ''
+    message.attachment_size = 0
+    message.save(update_fields=['content', 'attachment', 'attachment_type', 'attachment_name', 'attachment_mime', 'attachment_size'])
+
+    appearance = get_or_create_chat_profile(request.user).to_payload()
+    payload = serialize_direct_message_payload(message, appearance)
+    payload['type'] = 'message_updated'
+    notify_direct_message_event(request.user.id, other_user.id, payload)
+    return JsonResponse({'ok': True, 'message': payload})
+
+
+@login_required
+@require_POST
+def delete_direct_message(request, public_id, message_id):
+    try:
+        other_user = resolve_user_by_public_id(public_id)
+    except User.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
+    if other_user == request.user or not are_friends(request.user, other_user):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+
+    conversation = get_or_create_direct_conversation(request.user, other_user)
+    try:
+        message = DirectMessage.objects.select_related('sender').get(pk=message_id, conversation=conversation)
+    except DirectMessage.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'message_not_found'}, status=404)
+    if message.sender_id != request.user.id:
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+
+    if message.attachment:
+        message.attachment.delete(save=False)
+    deleted_id = message.id
+    message.delete()
+    payload = build_direct_message_delete_payload(deleted_id)
+    notify_direct_message_event(request.user.id, other_user.id, payload)
+    return JsonResponse({'ok': True, 'id': deleted_id})
 
 
 @login_required

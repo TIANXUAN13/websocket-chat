@@ -503,7 +503,7 @@
                 <span class="camera-capture-tip" id="room-camera-tip">允许浏览器访问摄像头后，点击拍照或录像并直接上传。</span>
                 <div class="camera-capture-actions">
                     <button class="btn btn-primary" type="button" id="room-camera-capture-btn">拍照上传</button>
-                    <button class="btn btn-secondary" type="button" id="room-camera-record-btn">开始录像</button>
+                    <button class="btn btn-secondary" type="button" id="room-camera-record-btn">录像上传</button>
                 </div>
             </div>
         </div>
@@ -512,6 +512,8 @@
     <div class="message-context-menu panel-card" id="message-context-menu" hidden>
         <button class="message-context-action" type="button" data-action="copy">复制</button>
         <button class="message-context-action" type="button" data-action="quote">引用</button>
+        <button class="message-context-action" type="button" data-action="recall" hidden>撤回</button>
+        <button class="message-context-action" type="button" data-action="delete" hidden>删除</button>
         <button class="message-context-action" type="button" data-action="favorite-emoji" hidden>收藏表情</button>
     </div>
 
@@ -558,6 +560,9 @@
         const userEmojiUploadUrl = '{% url "upload_user_emoji" %}';
         const roomEmojiSendUrlTemplate = '{% url "send_room_emoji" room_name 999999 %}';
         const roomEmojiFavoriteUrlTemplate = '{% url "favorite_room_image_emoji" room_name 999999 %}';
+        const roomMessageRecallUrlTemplate = '{% url "recall_room_message" room_name 999999 %}';
+        const roomMessageDeleteUrlTemplate = '{% url "delete_room_message" room_name 999999 %}';
+        const chatAttachmentLimitBytes = 50 * 1024 * 1024;
         const userProfileUrlTemplate = '{% url "user_profile" "__public_id__" %}';
         const userProfileNextQuery = 'next={{ user_profile_next_url|urlencode }}';
         let baseRoomMembers = {{ room_members_json }};
@@ -587,6 +592,8 @@
         let roomCameraRecorder = null;
         let roomCameraChunks = [];
         let roomShouldUploadRecording = false;
+        let roomLongPressTimer = null;
+        let roomLongPressTriggered = false;
         const roomMessageSignatures = new Set();
         const PRECISE_LOCATION_SYNC_KEY = 'codex_precise_location_synced_at';
         const PRECISE_LOCATION_SYNC_TTL = 10 * 60 * 1000;
@@ -714,6 +721,15 @@
             return `${baseName.slice(0, headLength)}...${extension}`;
         }
 
+        function validateRoomAttachmentFile(file) {
+            if (!file) return false;
+            if ((file.size || 0) > chatAttachmentLimitBytes) {
+                showCopyToast(`附件不能超过 ${Math.max(1, Math.floor(chatAttachmentLimitBytes / (1024 * 1024)))}MB`, true);
+                return false;
+            }
+            return true;
+        }
+
         function applyAttachmentDisplayNames(root = document) {
             root.querySelectorAll('.chat-attachment-file strong, .history-media-item strong').forEach((node) => {
                 const originalText = node.dataset.originalText || node.textContent || '';
@@ -739,10 +755,17 @@
             if (attachment.kind === 'video') {
                 return `
                     <div class="chat-attachment-stack">
-                        <div class="chat-attachment chat-attachment-video">
-                            <video controls playsinline preload="metadata">
-                                <source src="${escapeHtml(attachment.url)}" type="${escapeHtml(attachment.mime || 'video/mp4')}">
-                            </video>
+                        <div class="chat-attachment chat-attachment-video video-attachment-preview" data-video-url="${escapeHtml(attachment.url)}" data-video-mime="${escapeHtml(attachment.mime || 'video/mp4')}" data-video-name="${escapeHtml(attachment.name || '聊天视频')}" data-video-thumbnail="${escapeHtml(attachment.thumbnail_url || '')}">
+                            <button class="video-attachment-trigger" type="button">
+                                ${attachment.thumbnail_url ? `<img class="video-attachment-thumb" src="${escapeHtml(attachment.thumbnail_url)}" alt="${escapeHtml(attachment.name || '聊天视频')}">` : ''}
+                                <span class="video-attachment-play">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M8 6.5v11l9-5.5-9-5.5z"></path>
+                                    </svg>
+                                </span>
+                                <strong>${escapeHtml(attachment.name || '聊天视频')}</strong>
+                                <span>点击加载视频预览</span>
+                            </button>
                         </div>
                     </div>
                 `;
@@ -857,6 +880,17 @@
                 notifyParentThreadRemoved();
                 alert('房间已被房主删除');
                 window.location.href = '/chat/';
+                return;
+            }
+
+            if (data.type === 'message_deleted') {
+                removeRoomMessageById(data.id);
+                return;
+            }
+
+            if (data.type === 'message_updated') {
+                updateRoomMessageElement(data);
+                markRoomAsRead();
                 return;
             }
 
@@ -986,15 +1020,15 @@
         }
 
         async function openRoomCameraModal() {
+            if (roomPreferNativeCapture()) {
+                toggleRoomAttachmentPanel(false);
+                roomCameraInput?.click();
+                return;
+            }
             if (roomCameraModal) {
                 roomCameraModal.hidden = false;
             }
             toggleRoomAttachmentPanel(false);
-            if (roomPreferNativeCapture()) {
-                setRoomCameraTip('点击下方按钮，直接调用手机相机拍照或录像。');
-                stopRoomCameraStream();
-                return;
-            }
             if (!roomCameraSupported()) {
                 setRoomCameraTip('当前浏览器不支持直接调用摄像头。');
                 return;
@@ -1043,7 +1077,7 @@
 
         async function toggleRoomVideoRecording() {
             if (roomPreferNativeCapture()) {
-                closeRoomCameraModal();
+                toggleRoomAttachmentPanel(false);
                 roomVideoCaptureInput?.click();
                 return;
             }
@@ -1177,6 +1211,32 @@
                 throw new Error(payload.error || 'emoji_favorite_failed');
             }
             appendRoomEmojiChip(payload.emoji);
+        }
+
+        async function recallRoomMessage(messageId) {
+            const response = await fetch(roomMessageRecallUrlTemplate.replace('999999', encodeURIComponent(messageId)), {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'recall_failed');
+            }
+            updateRoomMessageElement(payload.message);
+        }
+
+        async function deleteRoomChatMessage(messageId) {
+            const response = await fetch(roomMessageDeleteUrlTemplate.replace('999999', encodeURIComponent(messageId)), {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'delete_failed');
+            }
+            removeRoomMessageById(payload.id || messageId);
         }
 
         async function uploadRoomAttachment(file) {
@@ -1320,8 +1380,70 @@
 
         function updateRoomContextMenuActions(messageElement) {
             const favoriteAction = messageContextMenu.querySelector('[data-action="favorite-emoji"]');
+            const recallAction = messageContextMenu.querySelector('[data-action="recall"]');
+            const deleteAction = messageContextMenu.querySelector('[data-action="delete"]');
+            const isMine = (messageElement?.dataset.messageUser || '') === username;
+            const createdAt = messageElement?.dataset.messageTs ? new Date(messageElement.dataset.messageTs) : null;
+            const canRecall = !!(isMine && createdAt && !Number.isNaN(createdAt.getTime()) && (Date.now() - createdAt.getTime()) <= 5 * 60 * 1000);
             if (!favoriteAction) return;
             favoriteAction.hidden = !messageElement?.querySelector('.chat-attachment-image');
+            if (recallAction) recallAction.hidden = !canRecall;
+            if (deleteAction) deleteAction.hidden = !isMine;
+        }
+
+        function removeRoomMessageById(messageId) {
+            if (!messageId) return;
+            const target = messagesDiv.querySelector(`.message[data-message-id="${CSS.escape(String(messageId))}"]`);
+            if (target) {
+                target.remove();
+            }
+            const latestMessageElement = Array.from(messagesDiv.querySelectorAll('.message'))
+                .reverse()
+                .find((item) => !item.classList.contains('system') && !item.classList.contains('kick') && !item.classList.contains('delete-room'));
+            syncParentThreadStatusFromElement(latestMessageElement);
+        }
+
+        function updateRoomMessageElement(data) {
+            const target = messagesDiv.querySelector(`.message[data-message-id="${CSS.escape(String(data.id || ''))}"]`);
+            if (!target) return;
+            const date = data.timestamp ? new Date(data.timestamp) : new Date();
+            const timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+            const normalizedMessage = typeof data.message === 'string' ? data.message : '';
+            const parsedMessage = parseQuotedMessage(normalizedMessage);
+            target.dataset.messageUser = data.user || '';
+            target.dataset.messageTime = timeStr;
+            target.dataset.messageTs = data.timestamp || '';
+            target.dataset.messageContent = normalizedMessage;
+            target.dataset.attachmentKind = data.attachment?.kind || '';
+            target.dataset.attachmentName = data.attachment?.name || '';
+            const bubble = target.querySelector('.message-bubble');
+            if (bubble) {
+                bubble.classList.toggle('image-only-bubble', (data.attachment?.kind === 'image' || data.attachment?.kind === 'video') && !parsedMessage.body && !parsedMessage.fullText);
+                bubble.innerHTML = `${renderMessageContent(parsedMessage)}${renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id })}`;
+            }
+            const timeNode = target.querySelector('.msg-time');
+            if (timeNode) {
+                timeNode.textContent = timeStr;
+            }
+            syncParentThreadStatusFromElement(target);
+        }
+
+        function activateRoomVideoPreview(previewCard) {
+            if (!previewCard || previewCard.dataset.videoReady === '1') return;
+            const videoUrl = previewCard.dataset.videoUrl || '';
+            if (!videoUrl) return;
+            const videoMime = previewCard.dataset.videoMime || 'video/mp4';
+            const videoName = previewCard.dataset.videoName || '聊天视频';
+            previewCard.dataset.videoReady = '1';
+            previewCard.innerHTML = `
+                <video controls playsinline preload="metadata">
+                    <source src="${escapeHtml(videoUrl)}" type="${escapeHtml(videoMime)}">
+                </video>
+                <a class="chat-attachment chat-attachment-file" href="${escapeHtml(videoUrl)}" target="_blank" rel="noopener">
+                    <strong>${escapeHtml(formatAttachmentDisplayName(videoName))}</strong>
+                    <span>若无法播放，可点这里下载或新开查看</span>
+                </a>
+            `;
         }
 
         function showRoomContextMenuAt(messageElement, clientX, clientY, anchorRect = null) {
@@ -1430,6 +1552,7 @@
             msgDiv.dataset.messageId = data.id || '';
             msgDiv.dataset.messageUser = data.user || '';
             msgDiv.dataset.messageTime = timeStr;
+            msgDiv.dataset.messageTs = data.timestamp || '';
             msgDiv.dataset.messageContent = normalizedMessage;
             msgDiv.dataset.attachmentKind = data.attachment?.kind || '';
             msgDiv.dataset.attachmentName = data.attachment?.name || '';
@@ -1791,6 +1914,20 @@
                 } catch (error) {
                     showCopyToast('收藏表情失败，请稍后再试', true);
                 }
+            } else if (action === 'recall') {
+                try {
+                    await recallRoomMessage(activeMessageElement.dataset.messageId);
+                    showCopyToast('消息已撤回');
+                } catch (error) {
+                    showCopyToast('撤回失败，可能已超过 5 分钟', true);
+                }
+            } else if (action === 'delete') {
+                try {
+                    await deleteRoomChatMessage(activeMessageElement.dataset.messageId);
+                    showCopyToast('消息已删除');
+                } catch (error) {
+                    showCopyToast('删除失败，请稍后再试', true);
+                }
             }
 
             hideMessageContextMenu();
@@ -1814,18 +1951,24 @@
         });
 
         messagesDiv.addEventListener('click', function(event) {
-            const imageLink = event.target.closest('.chat-attachment-image');
-            const messageElement = event.target.closest('.message');
-            if (imageLink && messageElement) {
+            if (roomLongPressTriggered) {
+                roomLongPressTriggered = false;
                 event.preventDefault();
                 event.stopPropagation();
-                const rect = imageLink.getBoundingClientRect();
-                showRoomContextMenuAt(
-                    messageElement,
-                    rect.left + Math.min(rect.width - 24, 80),
-                    rect.top + Math.min(rect.height - 24, 80),
-                    rect
-                );
+                return;
+            }
+            const videoPreview = event.target.closest('.video-attachment-preview');
+            if (videoPreview) {
+                activateRoomVideoPreview(videoPreview);
+                return;
+            }
+            const imageLink = event.target.closest('.chat-attachment-image');
+            const videoPlayer = event.target.closest('.chat-attachment-video video');
+            const messageElement = event.target.closest('.message');
+            if (imageLink && messageElement) {
+                return;
+            }
+            if (videoPlayer && messageElement) {
                 return;
             }
 
@@ -1843,6 +1986,31 @@
                 });
                 messageElement.classList.toggle('time-visible', nextVisible);
             }
+        });
+
+        messagesDiv.addEventListener('touchstart', function(event) {
+            const bubble = event.target.closest('.message-bubble');
+            const messageElement = event.target.closest('.message');
+            const videoPlayer = event.target.closest('.chat-attachment-video video');
+            if (videoPlayer) {
+                return;
+            }
+            if (!bubble || !messageElement || messageElement.classList.contains('system') || messageElement.classList.contains('kick') || messageElement.classList.contains('delete-room')) {
+                return;
+            }
+            window.clearTimeout(roomLongPressTimer);
+            roomLongPressTriggered = false;
+            const touch = event.touches[0];
+            roomLongPressTimer = window.setTimeout(() => {
+                roomLongPressTriggered = true;
+                showRoomContextMenuAt(messageElement, touch.clientX, touch.clientY);
+            }, 450);
+        }, { passive: true });
+
+        ['touchend', 'touchcancel', 'touchmove'].forEach((eventName) => {
+            messagesDiv.addEventListener(eventName, () => {
+                window.clearTimeout(roomLongPressTimer);
+            }, { passive: true });
         });
 
         function markPreciseLocationSynced() {
@@ -2065,7 +2233,21 @@
                 const action = event.target.closest('.chat-attachment-action');
                 if (!action) return;
                 if (action.dataset.cameraTrigger === 'room') {
+                    if (roomPreferNativeCapture()) {
+                        toggleRoomAttachmentPanel(false);
+                        roomCameraInput?.click();
+                        return;
+                    }
                     openRoomCameraModal();
+                    return;
+                }
+                if (action.dataset.videoTrigger === 'room') {
+                    if (roomPreferNativeCapture()) {
+                        toggleRoomAttachmentPanel(false);
+                        roomVideoCaptureInput?.click();
+                        return;
+                    }
+                    toggleRoomVideoRecording();
                     return;
                 }
                 const targetInput = document.getElementById(action.dataset.target || '');
@@ -2079,6 +2261,10 @@
             if (!input) return;
             input.addEventListener('change', (event) => {
                 const [file] = event.target.files || [];
+                if (!validateRoomAttachmentFile(file)) {
+                    event.target.value = '';
+                    return;
+                }
                 uploadRoomAttachment(file);
             });
         });
