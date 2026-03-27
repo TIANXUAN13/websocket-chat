@@ -3146,6 +3146,191 @@ select.form-input {
     box-shadow: 0 10px 20px rgba(59, 39, 24, 0.12);
 }
 
+.chat-attachment-image {
+    cursor: zoom-in;
+}
+
+.lightbox-open {
+    overflow: hidden;
+}
+
+.chat-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.chat-lightbox[hidden] {
+    display: none !important;
+}
+
+.chat-lightbox-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(19, 14, 11, 0.82);
+    backdrop-filter: blur(10px);
+}
+
+.chat-lightbox-panel {
+    position: relative;
+    z-index: 1;
+    width: min(92vw, 1080px);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 18px;
+}
+
+.chat-lightbox-figure {
+    margin: 0;
+    display: grid;
+    gap: 14px;
+    justify-items: center;
+}
+
+.chat-lightbox-figure img {
+    display: block;
+    max-width: 100%;
+    max-height: min(78vh, 920px);
+    border-radius: 22px;
+    object-fit: contain;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+    background: rgba(255, 250, 246, 0.08);
+}
+
+.chat-lightbox-figure figcaption {
+    color: rgba(255, 244, 236, 0.88);
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.chat-lightbox-close,
+.chat-lightbox-nav {
+    border: 0;
+    width: 52px;
+    height: 52px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 247, 240, 0.14);
+    color: #fff5ed;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(255, 244, 236, 0.12);
+}
+
+.chat-lightbox-close {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    z-index: 2;
+}
+
+.chat-lightbox-close svg,
+.chat-lightbox-nav svg {
+    width: 24px;
+    height: 24px;
+}
+
+@media (max-width: 720px) {
+    .chat-lightbox {
+        padding: 14px;
+    }
+
+    .chat-lightbox-panel {
+        width: 100%;
+        gap: 10px;
+        grid-template-columns: 44px minmax(0, 1fr) 44px;
+    }
+
+    .chat-lightbox-close,
+    .chat-lightbox-nav {
+        width: 44px;
+        height: 44px;
+    }
+
+    .chat-lightbox-close {
+        top: -4px;
+        right: 0;
+    }
+
+    .chat-lightbox-figure img {
+        max-height: 72vh;
+        border-radius: 18px;
+    }
+}
+
+.chat-attachment-video video {
+    display: block;
+    width: min(320px, 62vw);
+    max-width: 100%;
+    max-height: 320px;
+    border-radius: 16px;
+    background: #120d0a;
+    box-shadow: 0 10px 20px rgba(59, 39, 24, 0.12);
+}
+
+.video-attachment-preview {
+    display: grid;
+    gap: 10px;
+    min-width: min(320px, 62vw);
+    padding: 16px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(32, 24, 19, 0.96), rgba(60, 44, 32, 0.92));
+    color: #fff6ef;
+    box-shadow: 0 10px 20px rgba(59, 39, 24, 0.16);
+}
+
+.video-attachment-trigger {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+    justify-items: start;
+    text-align: left;
+    cursor: pointer;
+}
+
+.video-attachment-thumb {
+    width: 100%;
+    max-width: min(320px, 62vw);
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 14px;
+    display: block;
+}
+
+.video-attachment-play {
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.video-attachment-play svg {
+    width: 24px;
+    height: 24px;
+}
+
+.video-attachment-trigger strong {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.video-attachment-trigger span {
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(255, 246, 239, 0.76);
+}
+
 .chat-emoji-save {
     justify-self: start;
     border: 0;
@@ -3956,6 +4141,106 @@ select.form-input {
 
 .chat-attachment-panel[hidden] {
     display: none !important;
+}
+
+.camera-capture-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.camera-capture-modal[hidden] {
+    display: none !important;
+}
+
+.camera-capture-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(38, 27, 18, 0.42);
+    backdrop-filter: blur(8px);
+}
+
+.camera-capture-dialog {
+    position: relative;
+    width: min(100%, 520px);
+    max-height: min(92vh, 920px);
+    border-radius: 28px;
+    border: 1px solid rgba(190, 106, 66, 0.18);
+    background: rgba(255, 251, 246, 0.96);
+    box-shadow: 0 30px 80px rgba(70, 46, 28, 0.28);
+    padding: 20px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+}
+
+.camera-capture-head,
+.camera-capture-foot,
+.camera-capture-actions {
+    display: flex;
+    align-items: center;
+}
+
+.camera-capture-head,
+.camera-capture-foot {
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.camera-capture-head strong {
+    font-size: 20px;
+}
+
+.camera-capture-close {
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(190, 106, 66, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 244, 235, 0.9);
+    color: #6d5140;
+    cursor: pointer;
+}
+
+.camera-capture-stage {
+    overflow: hidden;
+    border-radius: 24px;
+    margin: 18px 0;
+    background:
+        radial-gradient(circle at top, rgba(255, 220, 188, 0.45), transparent 50%),
+        linear-gradient(180deg, #2e2219, #17110d);
+    aspect-ratio: 3 / 4;
+    min-height: 260px;
+    max-height: min(62vh, 680px);
+}
+
+.camera-capture-stage video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.camera-capture-tip {
+    color: #8a7060;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.camera-capture-foot {
+    padding-top: 14px;
+    border-top: 1px solid rgba(190, 106, 66, 0.12);
+}
+
+.camera-capture-actions {
+    gap: 12px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
 }
 
 .chat-emoji-panel {
@@ -5015,6 +5300,39 @@ code {
 }
 
 @media (max-width: 720px) {
+    .chat-attachment-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .camera-capture-modal {
+        padding: 12px;
+    }
+
+    .camera-capture-dialog {
+        width: 100%;
+        max-height: 94vh;
+        border-radius: 22px;
+        padding: 16px;
+    }
+
+    .camera-capture-stage {
+        min-height: 220px;
+        max-height: 50vh;
+    }
+
+    .camera-capture-foot {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .camera-capture-actions {
+        width: 100%;
+    }
+
+    .camera-capture-actions .btn {
+        flex: 1 1 0;
+    }
+
     .history-page-header,
     .history-page-header-main {
         flex-direction: column;

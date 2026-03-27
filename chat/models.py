@@ -392,6 +392,7 @@ class Message(models.Model):
     message = models.TextField(verbose_name='消息内容', blank=True, default='')
     message_type = models.CharField(max_length=20, default='chat', verbose_name='消息类型')
     attachment = models.FileField(upload_to='chat_attachments/rooms/%Y/%m/', blank=True, null=True, verbose_name='附件')
+    attachment_thumbnail = models.ImageField(upload_to='chat_attachments/rooms/%Y/%m/thumbs/', blank=True, null=True, verbose_name='附件缩略图')
     attachment_type = models.CharField(
         max_length=20,
         choices=ATTACHMENT_TYPE_CHOICES,
@@ -414,6 +415,13 @@ class Message(models.Model):
     
     def __str__(self):
         return f"{self.username}: {self.message[:50]}"
+
+    def delete_attachment_files(self):
+        thumbnail_field = getattr(self, 'attachment_thumbnail', None)
+        if thumbnail_field:
+            thumbnail_field.delete(save=False)
+        if self.attachment:
+            self.attachment.delete(save=False)
 
 
 class Friendship(models.Model):
@@ -509,6 +517,7 @@ class DirectMessage(models.Model):
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='direct_messages_sent')
     content = models.TextField(verbose_name='消息内容', blank=True, default='')
     attachment = models.FileField(upload_to='chat_attachments/direct/%Y/%m/', blank=True, null=True, verbose_name='附件')
+    attachment_thumbnail = models.ImageField(upload_to='chat_attachments/direct/%Y/%m/thumbs/', blank=True, null=True, verbose_name='附件缩略图')
     attachment_type = models.CharField(
         max_length=20,
         choices=ATTACHMENT_TYPE_CHOICES,
@@ -524,6 +533,13 @@ class DirectMessage(models.Model):
         verbose_name = '私聊消息'
         verbose_name_plural = '私聊消息'
         ordering = ['created_at']
+
+    def delete_attachment_files(self):
+        thumbnail_field = getattr(self, 'attachment_thumbnail', None)
+        if thumbnail_field:
+            thumbnail_field.delete(save=False)
+        if self.attachment:
+            self.attachment.delete(save=False)
 
 
 class RoomVisitState(models.Model):

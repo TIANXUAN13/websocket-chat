@@ -154,7 +154,7 @@
             <div class="chat-messages direct-message-list" id="direct-message-list">
                 {% if messages_list %}
                     {% for item in messages_list %}
-                        <div class="message {% if item.sender == user %}mine{% else %}other{% endif %}" data-message-id="{{ item.id }}" data-message-user="{{ item.sender.username|escape }}" data-message-time="{{ item.created_at|date:'H:i' }}" data-message-content="{{ item.content|escape }}" data-attachment-kind="{{ item.attachment_type }}" data-attachment-name="{{ item.attachment_name|escape }}">
+                        <div class="message {% if item.sender == user %}mine{% else %}other{% endif %}" data-message-id="{{ item.id }}" data-message-user="{{ item.sender.username|escape }}" data-message-time="{{ item.created_at|date:'H:i' }}" data-message-ts="{{ item.created_at|date:'c' }}" data-message-content="{{ item.content|escape }}" data-attachment-kind="{{ item.attachment_type }}" data-attachment-name="{{ item.attachment_name|escape }}">
                             <div class="msg-shell">
                                 <div class="message-avatar{% if item.sender.chat_profile.avatar_image %} has-photo{% endif %}">
                                     {% if item.sender.chat_profile.avatar_image %}
@@ -169,15 +169,30 @@
                                             <div class="msg-user">{{ item.sender.chat_profile.get_display_name }}</div>
                                         </div>
                                     </div>
-                                    <div class="message-bubble{% if item.attachment and item.attachment_type == 'image' and not item.content %} image-only-bubble{% endif %}">
+                                    <div class="message-bubble{% if item.attachment and not item.content and item.attachment_type != 'file' %} image-only-bubble{% endif %}">
                                         {% if item.content %}
                                             <div class="msg-text">{{ item.content }}</div>
                                         {% endif %}
                                         {% if item.attachment %}
                                             {% if item.attachment_type == 'image' %}
-                                                <a class="chat-attachment chat-attachment-image" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                                                <a class="chat-attachment chat-attachment-image" href="{{ item.attachment.url }}" data-image-url="{{ item.attachment.url }}" data-image-name="{{ item.attachment_name|default:'聊天图片'|escape }}" aria-label="查看图片">
                                                     <img src="{{ item.attachment.url }}" alt="{{ item.attachment_name|default:'聊天图片' }}">
                                                 </a>
+                                            {% elif item.attachment_type == 'video' %}
+                                                <div class="chat-attachment chat-attachment-video video-attachment-preview" data-video-url="{{ item.attachment.url }}" data-video-mime="{{ item.attachment_mime|default:'video/mp4' }}" data-video-name="{{ item.attachment_name|default:'聊天视频'|escape }}" data-video-thumbnail="{% if item.attachment_thumbnail %}{{ item.attachment_thumbnail.url }}{% endif %}">
+                                                    <button class="video-attachment-trigger" type="button">
+                                                        {% if item.attachment_thumbnail %}
+                                                            <img class="video-attachment-thumb" src="{{ item.attachment_thumbnail.url }}" alt="{{ item.attachment_name|default:'聊天视频' }}">
+                                                        {% endif %}
+                                                        <span class="video-attachment-play">
+                                                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                                                <path d="M8 6.5v11l9-5.5-9-5.5z"></path>
+                                                            </svg>
+                                                        </span>
+                                                        <strong>{{ item.attachment_name|default:'聊天视频' }}</strong>
+                                                        <span>点击加载视频预览</span>
+                                                    </button>
+                                                </div>
                                             {% else %}
                                                 <a class="chat-attachment chat-attachment-file" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
                                                     <strong>{{ item.attachment_name }}</strong>
@@ -222,6 +237,7 @@
                     <button class="btn btn-secondary attachment-trigger" type="button" id="direct-attachment-trigger" aria-label="打开附件面板">+</button>
                     <input type="file" id="direct-image-input" accept="image/*" hidden>
                     <input type="file" id="direct-camera-input" accept="image/*" capture="environment" hidden>
+                    <input type="file" id="direct-video-capture-input" accept="video/*" capture="environment" hidden>
                     <input type="file" id="direct-file-input" hidden>
                 </div>
                 <div class="chat-emoji-shell">
@@ -253,7 +269,7 @@
                         <strong>发图片</strong>
                         <span>相册里挑一张</span>
                     </button>
-                    <button class="chat-attachment-action" type="button" data-target="direct-camera-input">
+                    <button class="chat-attachment-action" type="button" data-camera-trigger="direct">
                         <span class="chat-attachment-icon">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
                                 <path d="M8 7l1.2-2h5.6L16 7h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z"></path>
@@ -311,9 +327,61 @@
         </section>
     </main>
 
+    <div class="camera-capture-modal" id="direct-camera-modal" hidden>
+        <div class="camera-capture-backdrop" data-camera-close="direct"></div>
+        <div class="camera-capture-dialog" role="dialog" aria-modal="true" aria-labelledby="direct-camera-title">
+            <div class="camera-capture-head">
+                <strong id="direct-camera-title">拍照片</strong>
+                <button class="camera-capture-close" type="button" data-camera-close="direct" aria-label="关闭拍照">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="camera-capture-stage">
+                <video id="direct-camera-video" autoplay playsinline muted></video>
+                <canvas id="direct-camera-canvas" hidden></canvas>
+            </div>
+            <div class="camera-capture-foot">
+                <span class="camera-capture-tip" id="direct-camera-tip">允许浏览器访问摄像头后，点击拍照或录像并直接上传。</span>
+                <div class="camera-capture-actions">
+                    <button class="btn btn-primary" type="button" id="direct-camera-capture-btn">拍照上传</button>
+                    <button class="btn btn-secondary" type="button" id="direct-camera-record-btn">录像上传</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-lightbox" id="direct-image-lightbox" hidden>
+        <div class="chat-lightbox-backdrop" data-lightbox-close="1"></div>
+        <div class="chat-lightbox-panel" role="dialog" aria-modal="true" aria-label="图片预览">
+            <button class="chat-lightbox-close" type="button" id="direct-image-lightbox-close" aria-label="关闭图片预览">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+            <button class="chat-lightbox-nav is-prev" type="button" id="direct-image-lightbox-prev" aria-label="上一张图片">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 18l-6-6 6-6"/>
+                </svg>
+            </button>
+            <figure class="chat-lightbox-figure">
+                <img id="direct-image-lightbox-image" src="" alt="">
+                <figcaption id="direct-image-lightbox-caption"></figcaption>
+            </figure>
+            <button class="chat-lightbox-nav is-next" type="button" id="direct-image-lightbox-next" aria-label="下一张图片">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 6l6 6-6 6"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
     <div class="message-context-menu panel-card" id="direct-message-context-menu" hidden>
         <button class="message-context-action" type="button" data-action="copy">复制</button>
         <button class="message-context-action" type="button" data-action="quote">引用</button>
+        <button class="message-context-action" type="button" data-action="recall" hidden>撤回</button>
+        <button class="message-context-action" type="button" data-action="delete" hidden>删除</button>
         <button class="message-context-action" type="button" data-action="favorite-emoji" hidden>收藏表情</button>
     </div>
 
@@ -350,7 +418,14 @@
         const directAttachmentPanel = document.getElementById('direct-attachment-panel');
         const directImageInput = document.getElementById('direct-image-input');
         const directCameraInput = document.getElementById('direct-camera-input');
+        const directVideoCaptureInput = document.getElementById('direct-video-capture-input');
         const directFileInput = document.getElementById('direct-file-input');
+        const directCameraModal = document.getElementById('direct-camera-modal');
+        const directCameraVideo = document.getElementById('direct-camera-video');
+        const directCameraCanvas = document.getElementById('direct-camera-canvas');
+        const directCameraTip = document.getElementById('direct-camera-tip');
+        const directCameraCaptureBtn = document.getElementById('direct-camera-capture-btn');
+        const directCameraRecordBtn = document.getElementById('direct-camera-record-btn');
         const directEmojiTrigger = document.getElementById('direct-emoji-trigger');
         const directEmojiPanel = document.getElementById('direct-emoji-panel');
         const directEmojiGrid = document.getElementById('direct-emoji-grid');
@@ -358,6 +433,12 @@
         const directEmojiUploadInput = document.getElementById('direct-emoji-upload-input');
         const directEmojiTabs = Array.from(document.querySelectorAll('#direct-emoji-panel .emoji-panel-tab'));
         const directMessageContextMenu = document.getElementById('direct-message-context-menu');
+        const directImageLightbox = document.getElementById('direct-image-lightbox');
+        const directImageLightboxImage = document.getElementById('direct-image-lightbox-image');
+        const directImageLightboxCaption = document.getElementById('direct-image-lightbox-caption');
+        const directImageLightboxPrev = document.getElementById('direct-image-lightbox-prev');
+        const directImageLightboxNext = document.getElementById('direct-image-lightbox-next');
+        const directImageLightboxClose = document.getElementById('direct-image-lightbox-close');
         const currentUsername = '{{ user.username }}';
         const otherUsername = {{ other_username_json }};
         const otherPublicId = '{{ other_public_id|escapejs }}';
@@ -367,6 +448,9 @@
         const userEmojiUploadUrl = '{% url "upload_user_emoji" %}';
         const directEmojiSendUrlTemplate = '{% url "send_direct_emoji" other_profile.public_id 999999 %}';
         const directEmojiFavoriteUrlTemplate = '{% url "favorite_direct_image_emoji" other_profile.public_id 999999 %}';
+        const directMessageRecallUrlTemplate = '{% url "recall_direct_message" other_profile.public_id 999999 %}';
+        const directMessageDeleteUrlTemplate = '{% url "delete_direct_message" other_profile.public_id 999999 %}';
+        const chatAttachmentLimitBytes = 50 * 1024 * 1024;
         const myAppearance = {{ chat_profile_payload_json }};
         const otherAppearance = {{ other_profile_payload_json }};
         let activeDirectMessageElement = null;
@@ -382,6 +466,14 @@
         let preciseLocationAttemptCount = 0;
         let preciseLocationSynced = false;
         let directPendingUploadId = 0;
+        let directCameraStream = null;
+        let directCameraRecorder = null;
+        let directCameraChunks = [];
+        let directShouldUploadRecording = false;
+        let directLongPressTimer = null;
+        let directLongPressTriggered = false;
+        let directImageLightboxItems = [];
+        let directImageLightboxIndex = -1;
         const directMessageSignatures = new Set();
         const PRECISE_LOCATION_SYNC_KEY = 'codex_precise_location_synced_at';
         const PRECISE_LOCATION_SYNC_TTL = 10 * 60 * 1000;
@@ -466,6 +558,15 @@
             return `${baseName.slice(0, headLength)}...${extension}`;
         }
 
+        function validateDirectAttachmentFile(file) {
+            if (!file) return false;
+            if ((file.size || 0) > chatAttachmentLimitBytes) {
+                showDirectToast(`附件不能超过 ${Math.max(1, Math.floor(chatAttachmentLimitBytes / (1024 * 1024)))}MB`, true);
+                return false;
+            }
+            return true;
+        }
+
         function applyAttachmentDisplayNames(root = document) {
             root.querySelectorAll('.chat-attachment-file strong, .history-media-item strong').forEach((node) => {
                 const originalText = node.dataset.originalText || node.textContent || '';
@@ -482,9 +583,27 @@
             if (attachment.kind === 'image') {
                 return `
                     <div class="chat-attachment-stack">
-                        <a class="chat-attachment chat-attachment-image" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">
+                        <a class="chat-attachment chat-attachment-image" href="${escapeHtml(attachment.url)}" data-image-url="${escapeHtml(attachment.url)}" data-image-name="${escapeHtml(attachment.name || '聊天图片')}" aria-label="查看图片">
                             <img src="${escapeHtml(attachment.url)}" alt="${escapeHtml(attachment.name || '聊天图片')}">
                         </a>
+                    </div>
+                `;
+            }
+            if (attachment.kind === 'video') {
+                return `
+                    <div class="chat-attachment-stack">
+                        <div class="chat-attachment chat-attachment-video video-attachment-preview" data-video-url="${escapeHtml(attachment.url)}" data-video-mime="${escapeHtml(attachment.mime || 'video/mp4')}" data-video-name="${escapeHtml(attachment.name || '聊天视频')}" data-video-thumbnail="${escapeHtml(attachment.thumbnail_url || '')}">
+                            <button class="video-attachment-trigger" type="button">
+                                ${attachment.thumbnail_url ? `<img class="video-attachment-thumb" src="${escapeHtml(attachment.thumbnail_url)}" alt="${escapeHtml(attachment.name || '聊天视频')}">` : ''}
+                                <span class="video-attachment-play">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M8 6.5v11l9-5.5-9-5.5z"></path>
+                                    </svg>
+                                </span>
+                                <strong>${escapeHtml(attachment.name || '聊天视频')}</strong>
+                                <span>点击加载视频预览</span>
+                            </button>
+                        </div>
                     </div>
                 `;
             }
@@ -506,6 +625,9 @@
             }
             if (data.attachment?.kind === 'image') {
                 return `[图片] ${data.attachment.name || ''}`.trim();
+            }
+            if (data.attachment?.kind === 'video') {
+                return `[视频] ${data.attachment.name || ''}`.trim();
             }
             if (data.attachment?.kind === 'file') {
                 return `[文件] ${data.attachment.name || ''}`.trim();
@@ -539,8 +661,114 @@
 
         function updateDirectContextMenuActions(messageElement) {
             const favoriteAction = directMessageContextMenu.querySelector('[data-action="favorite-emoji"]');
+            const recallAction = directMessageContextMenu.querySelector('[data-action="recall"]');
+            const deleteAction = directMessageContextMenu.querySelector('[data-action="delete"]');
+            const isMine = (messageElement?.dataset.messageUser || '') === currentUsername;
+            const createdAt = messageElement?.dataset.messageTs ? new Date(messageElement.dataset.messageTs) : null;
+            const canRecall = !!(isMine && createdAt && !Number.isNaN(createdAt.getTime()) && (Date.now() - createdAt.getTime()) <= 5 * 60 * 1000);
             if (!favoriteAction) return;
             favoriteAction.hidden = !messageElement?.querySelector('.chat-attachment-image');
+            if (recallAction) recallAction.hidden = !canRecall;
+            if (deleteAction) deleteAction.hidden = !isMine;
+        }
+
+        function removeDirectMessageById(messageId) {
+            if (!messageId) return;
+            const target = directMessageList.querySelector(`.message[data-message-id="${CSS.escape(String(messageId))}"]`);
+            if (target) {
+                target.remove();
+            }
+            const latestMessageElement = Array.from(directMessageList.querySelectorAll('.message')).pop();
+            syncParentThreadStatusFromElement(latestMessageElement);
+        }
+
+        function updateDirectMessageElement(data) {
+            const target = directMessageList.querySelector(`.message[data-message-id="${CSS.escape(String(data.id || ''))}"]`);
+            if (!target) return;
+            const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
+            const timeStr = timestamp.getHours().toString().padStart(2, '0') + ':' + timestamp.getMinutes().toString().padStart(2, '0');
+            const normalizedMessage = typeof data.message === 'string' ? data.message : '';
+            const parsedMessage = parseQuotedMessage(normalizedMessage);
+            target.dataset.messageUser = data.user || '';
+            target.dataset.messageTime = timeStr;
+            target.dataset.messageTs = data.timestamp || '';
+            target.dataset.messageContent = normalizedMessage;
+            target.dataset.attachmentKind = data.attachment?.kind || '';
+            target.dataset.attachmentName = data.attachment?.name || '';
+            const bubble = target.querySelector('.message-bubble');
+            if (bubble) {
+                bubble.classList.toggle('image-only-bubble', (data.attachment?.kind === 'image' || data.attachment?.kind === 'video') && !parsedMessage.body && !parsedMessage.fullText);
+                bubble.innerHTML = `${renderMessageContent(parsedMessage)}${renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id })}`;
+            }
+            const timeNode = target.querySelector('.msg-time');
+            if (timeNode) {
+                timeNode.textContent = timeStr;
+            }
+            syncParentThreadStatusFromElement(target);
+        }
+
+        function activateDirectVideoPreview(previewCard) {
+            if (!previewCard || previewCard.dataset.videoReady === '1') return;
+            const videoUrl = previewCard.dataset.videoUrl || '';
+            if (!videoUrl) return;
+            const videoMime = previewCard.dataset.videoMime || 'video/mp4';
+            const videoName = previewCard.dataset.videoName || '聊天视频';
+            previewCard.dataset.videoReady = '1';
+            previewCard.innerHTML = `
+                <video controls playsinline preload="metadata">
+                    <source src="${escapeHtml(videoUrl)}" type="${escapeHtml(videoMime)}">
+                </video>
+                <a class="chat-attachment chat-attachment-file" href="${escapeHtml(videoUrl)}" target="_blank" rel="noopener">
+                    <strong>${escapeHtml(formatAttachmentDisplayName(videoName))}</strong>
+                    <span>若无法播放，可点这里下载或新开查看</span>
+                </a>
+            `;
+        }
+
+        function collectDirectImageLightboxItems() {
+            return Array.from(directMessageList.querySelectorAll('.chat-attachment-image')).map((link) => ({
+                url: link.dataset.imageUrl || link.getAttribute('href') || '',
+                name: link.dataset.imageName || link.querySelector('img')?.getAttribute('alt') || '聊天图片',
+                element: link,
+            })).filter((item) => item.url);
+        }
+
+        function syncDirectImageLightbox() {
+            const item = directImageLightboxItems[directImageLightboxIndex];
+            if (!item) return;
+            directImageLightboxImage.src = item.url;
+            directImageLightboxImage.alt = item.name;
+            directImageLightboxCaption.textContent = item.name;
+            const singleImage = directImageLightboxItems.length <= 1;
+            directImageLightboxPrev.hidden = singleImage;
+            directImageLightboxNext.hidden = singleImage;
+        }
+
+        function openDirectImageLightbox(targetLink) {
+            directImageLightboxItems = collectDirectImageLightboxItems();
+            directImageLightboxIndex = directImageLightboxItems.findIndex((item) => item.element === targetLink);
+            if (directImageLightboxIndex < 0) {
+                return;
+            }
+            syncDirectImageLightbox();
+            directImageLightbox.hidden = false;
+            document.body.classList.add('lightbox-open');
+        }
+
+        function closeDirectImageLightbox() {
+            directImageLightbox.hidden = true;
+            directImageLightboxImage.removeAttribute('src');
+            directImageLightboxImage.alt = '';
+            directImageLightboxCaption.textContent = '';
+            directImageLightboxItems = [];
+            directImageLightboxIndex = -1;
+            document.body.classList.remove('lightbox-open');
+        }
+
+        function stepDirectImageLightbox(step) {
+            if (directImageLightbox.hidden || !directImageLightboxItems.length) return;
+            directImageLightboxIndex = (directImageLightboxIndex + step + directImageLightboxItems.length) % directImageLightboxItems.length;
+            syncDirectImageLightbox();
         }
 
         function showDirectContextMenuAt(messageElement, clientX, clientY, anchorRect = null) {
@@ -585,7 +813,7 @@
             const attachmentKind = messageElement.dataset.attachmentKind || '';
             const attachmentName = messageElement.dataset.attachmentName || '';
             const previewText = parsedMessage.body || parsedMessage.fullText || (
-                attachmentKind === 'image' ? `[图片] ${attachmentName}` : (attachmentKind === 'file' ? `[文件] ${attachmentName}` : '')
+                attachmentKind === 'image' ? `[图片] ${attachmentName}` : (attachmentKind === 'video' ? `[视频] ${attachmentName}` : (attachmentKind === 'file' ? `[文件] ${attachmentName}` : ''))
             );
             notifyParentThreadStatus(previewText, messageElement.dataset.messageTime || '', 0);
         }
@@ -749,6 +977,7 @@
             msgDiv.dataset.messageId = data.id || '';
             msgDiv.dataset.messageUser = data.user || '';
             msgDiv.dataset.messageTime = timeStr;
+            msgDiv.dataset.messageTs = data.timestamp || '';
             msgDiv.dataset.messageContent = normalizedMessage;
             msgDiv.dataset.attachmentKind = data.attachment?.kind || '';
             msgDiv.dataset.attachmentName = data.attachment?.name || '';
@@ -761,7 +990,7 @@
                                 <div class="msg-user">${escapeHtml(data.display_name || data.user)}</div>
                             </div>
                         </div>
-                        <div class="message-bubble${data.attachment?.kind === 'image' && !parsedMessage.body && !parsedMessage.fullText ? ' image-only-bubble' : ''}">
+                        <div class="message-bubble${(data.attachment?.kind === 'image' || data.attachment?.kind === 'video') && !parsedMessage.body && !parsedMessage.fullText ? ' image-only-bubble' : ''}">
                             ${renderMessageContent(parsedMessage)}
                             ${renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id })}
                         </div>
@@ -926,6 +1155,15 @@
                 directHeartbeatTimeoutTimer = null;
                 return;
             }
+            if (data.type === 'message_deleted') {
+                removeDirectMessageById(data.id);
+                return;
+            }
+            if (data.type === 'message_updated') {
+                updateDirectMessageElement(data);
+                markDirectAsRead();
+                return;
+            }
             if (data.type !== 'chat') {
                 return;
             }
@@ -954,6 +1192,175 @@
             directEmojiTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
             if (shouldOpen) {
                 toggleDirectAttachmentPanel(false);
+            }
+        }
+
+        function directCameraSupported() {
+            return !!(window.isSecureContext && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+        }
+
+        function directPreferNativeCapture() {
+            return /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent || '')
+                || window.matchMedia('(pointer: coarse)').matches;
+        }
+
+        function setDirectCameraTip(message) {
+            if (directCameraTip) {
+                directCameraTip.textContent = message;
+            }
+        }
+
+        function getDirectRecorderMimeType() {
+            const candidates = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+            return candidates.find((type) => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
+        }
+
+        function stopDirectCameraStream() {
+            if (directCameraStream) {
+                directCameraStream.getTracks().forEach((track) => track.stop());
+                directCameraStream = null;
+            }
+            if (directCameraVideo) {
+                directCameraVideo.srcObject = null;
+            }
+        }
+
+        function closeDirectCameraModal() {
+            if (directCameraRecorder && directCameraRecorder.state !== 'inactive') {
+                directShouldUploadRecording = false;
+                directCameraRecorder.stop();
+            }
+            if (directCameraModal) {
+                directCameraModal.hidden = true;
+            }
+            if (directCameraRecordBtn) {
+                directCameraRecordBtn.textContent = '开始录像';
+            }
+            stopDirectCameraStream();
+        }
+
+        async function ensureDirectCameraStream(includeAudio = true) {
+            if (directCameraStream) {
+                return directCameraStream;
+            }
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } },
+                audio: includeAudio,
+            });
+            directCameraStream = stream;
+            if (directCameraVideo) {
+                directCameraVideo.srcObject = stream;
+                await directCameraVideo.play();
+            }
+            return stream;
+        }
+
+        async function openDirectCameraModal() {
+            if (directPreferNativeCapture()) {
+                toggleDirectAttachmentPanel(false);
+                directCameraInput?.click();
+                return;
+            }
+            if (directCameraModal) {
+                directCameraModal.hidden = false;
+            }
+            toggleDirectAttachmentPanel(false);
+            if (!directCameraSupported()) {
+                setDirectCameraTip('当前浏览器不支持直接调用摄像头。');
+                return;
+            }
+            try {
+                setDirectCameraTip('允许浏览器访问摄像头后，点击拍照或录像并直接上传。');
+                await ensureDirectCameraStream(true);
+            } catch (error) {
+                console.warn('打开摄像头失败:', error);
+                setDirectCameraTip('无法直接打开摄像头，请检查浏览器权限设置。');
+                showDirectToast('无法直接打开摄像头，请检查浏览器权限', true);
+            }
+        }
+
+        async function captureDirectCameraPhoto() {
+            if (directPreferNativeCapture()) {
+                closeDirectCameraModal();
+                directCameraInput?.click();
+                return;
+            }
+            if (!directCameraVideo || !directCameraCanvas) return;
+            const width = directCameraVideo.videoWidth || 0;
+            const height = directCameraVideo.videoHeight || 0;
+            if (!width || !height) {
+                showDirectToast('摄像头还没准备好，请稍后再试', true);
+                return;
+            }
+            directCameraCanvas.width = width;
+            directCameraCanvas.height = height;
+            const context = directCameraCanvas.getContext('2d');
+            if (!context) {
+                showDirectToast('拍照失败，请重试', true);
+                return;
+            }
+            context.drawImage(directCameraVideo, 0, 0, width, height);
+            const blob = await new Promise((resolve) => {
+                directCameraCanvas.toBlob(resolve, 'image/jpeg', 0.92);
+            });
+            if (!blob) {
+                showDirectToast('拍照失败，请重试', true);
+                return;
+            }
+            closeDirectCameraModal();
+            uploadDirectAttachment(new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' }));
+        }
+
+        async function toggleDirectVideoRecording() {
+            if (directPreferNativeCapture()) {
+                toggleDirectAttachmentPanel(false);
+                directVideoCaptureInput?.click();
+                return;
+            }
+            if (!window.MediaRecorder) {
+                showDirectToast('当前浏览器不支持录像', true);
+                return;
+            }
+            if (directCameraRecorder && directCameraRecorder.state === 'recording') {
+                directShouldUploadRecording = true;
+                directCameraRecorder.stop();
+                return;
+            }
+            try {
+                const stream = await ensureDirectCameraStream(true);
+                const mimeType = getDirectRecorderMimeType();
+                directCameraChunks = [];
+                directCameraRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+                directCameraRecorder.addEventListener('dataavailable', (event) => {
+                    if (event.data && event.data.size) {
+                        directCameraChunks.push(event.data);
+                    }
+                });
+                directCameraRecorder.addEventListener('stop', () => {
+                    const shouldUpload = directShouldUploadRecording;
+                    directShouldUploadRecording = false;
+                    if (directCameraRecordBtn) {
+                        directCameraRecordBtn.textContent = '开始录像';
+                    }
+                    if (!shouldUpload || !directCameraChunks.length) {
+                        directCameraChunks = [];
+                        return;
+                    }
+                    const type = directCameraChunks[0].type || mimeType || 'video/webm';
+                    const extension = type.includes('mp4') ? 'mp4' : 'webm';
+                    const file = new File(directCameraChunks, `camera_${Date.now()}.${extension}`, { type });
+                    directCameraChunks = [];
+                    closeDirectCameraModal();
+                    uploadDirectAttachment(file);
+                }, { once: true });
+                directCameraRecorder.start();
+                setDirectCameraTip('录像中，再点一次“停止并上传”即可发送。');
+                if (directCameraRecordBtn) {
+                    directCameraRecordBtn.textContent = '停止并上传';
+                }
+            } catch (error) {
+                console.warn('开始录像失败:', error);
+                showDirectToast('录像失败，请检查摄像头和麦克风权限', true);
             }
         }
 
@@ -1039,6 +1446,32 @@
                 throw new Error(payload.error || 'emoji_favorite_failed');
             }
             appendDirectEmojiChip(payload.emoji);
+        }
+
+        async function recallDirectMessage(messageId) {
+            const response = await fetch(directMessageRecallUrlTemplate.replace('999999', encodeURIComponent(messageId)), {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'recall_failed');
+            }
+            updateDirectMessageElement(payload.message);
+        }
+
+        async function deleteDirectMessage(messageId) {
+            const response = await fetch(directMessageDeleteUrlTemplate.replace('999999', encodeURIComponent(messageId)), {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'delete_failed');
+            }
+            removeDirectMessageById(payload.id || messageId);
         }
 
         async function uploadDirectAttachment(file) {
@@ -1144,6 +1577,20 @@
                 } catch (error) {
                     showDirectToast('收藏表情失败，请稍后再试', true);
                 }
+            } else if (action === 'recall') {
+                try {
+                    await recallDirectMessage(activeDirectMessageElement.dataset.messageId);
+                    showDirectToast('消息已撤回');
+                } catch (error) {
+                    showDirectToast('撤回失败，可能已超过 5 分钟', true);
+                }
+            } else if (action === 'delete') {
+                try {
+                    await deleteDirectMessage(activeDirectMessageElement.dataset.messageId);
+                    showDirectToast('消息已删除');
+                } catch (error) {
+                    showDirectToast('删除失败，请稍后再试', true);
+                }
             }
 
             hideDirectContextMenu();
@@ -1167,18 +1614,26 @@
         });
 
         directMessageList.addEventListener('click', function(event) {
+            if (directLongPressTriggered) {
+                directLongPressTriggered = false;
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            const videoPreview = event.target.closest('.video-attachment-preview');
+            if (videoPreview) {
+                activateDirectVideoPreview(videoPreview);
+                return;
+            }
             const imageLink = event.target.closest('.chat-attachment-image');
+            const videoPlayer = event.target.closest('.chat-attachment-video video');
             const messageElement = event.target.closest('.message');
             if (imageLink && messageElement) {
                 event.preventDefault();
-                event.stopPropagation();
-                const rect = imageLink.getBoundingClientRect();
-                showDirectContextMenuAt(
-                    messageElement,
-                    rect.left + Math.min(rect.width - 24, 80),
-                    rect.top + Math.min(rect.height - 24, 80),
-                    rect
-                );
+                openDirectImageLightbox(imageLink);
+                return;
+            }
+            if (videoPlayer && messageElement) {
                 return;
             }
 
@@ -1197,6 +1652,41 @@
                 messageElement.classList.toggle('time-visible', nextVisible);
             }
         });
+
+        directMessageList.addEventListener('touchstart', function(event) {
+            const bubble = event.target.closest('.message-bubble');
+            const messageElement = event.target.closest('.message');
+            const videoPlayer = event.target.closest('.chat-attachment-video video');
+            if (videoPlayer) {
+                return;
+            }
+            if (!bubble || !messageElement) {
+                return;
+            }
+            window.clearTimeout(directLongPressTimer);
+            directLongPressTriggered = false;
+            const touch = event.touches[0];
+            directLongPressTimer = window.setTimeout(() => {
+                directLongPressTriggered = true;
+                showDirectContextMenuAt(messageElement, touch.clientX, touch.clientY);
+            }, 450);
+        }, { passive: true });
+
+        ['touchend', 'touchcancel', 'touchmove'].forEach((eventName) => {
+            directMessageList.addEventListener(eventName, () => {
+                window.clearTimeout(directLongPressTimer);
+            }, { passive: true });
+        });
+
+        directImageLightbox.addEventListener('click', function(event) {
+            if (event.target.closest('[data-lightbox-close="1"]')) {
+                closeDirectImageLightbox();
+            }
+        });
+
+        directImageLightboxClose.addEventListener('click', closeDirectImageLightbox);
+        directImageLightboxPrev.addEventListener('click', () => stepDirectImageLightbox(-1));
+        directImageLightboxNext.addEventListener('click', () => stepDirectImageLightbox(1));
 
         directChatForm.addEventListener('submit', function(event) {
             const message = directMessageInput.value.trim();
@@ -1235,6 +1725,24 @@
             directAttachmentPanel.addEventListener('click', (event) => {
                 const action = event.target.closest('.chat-attachment-action');
                 if (!action) return;
+                if (action.dataset.cameraTrigger === 'direct') {
+                    if (directPreferNativeCapture()) {
+                        toggleDirectAttachmentPanel(false);
+                        directCameraInput?.click();
+                        return;
+                    }
+                    openDirectCameraModal();
+                    return;
+                }
+                if (action.dataset.videoTrigger === 'direct') {
+                    if (directPreferNativeCapture()) {
+                        toggleDirectAttachmentPanel(false);
+                        directVideoCaptureInput?.click();
+                        return;
+                    }
+                    toggleDirectVideoRecording();
+                    return;
+                }
                 const targetInput = document.getElementById(action.dataset.target || '');
                 if (targetInput) {
                     targetInput.click();
@@ -1242,10 +1750,14 @@
             });
         }
 
-        [directImageInput, directCameraInput, directFileInput].forEach((input) => {
+        [directImageInput, directCameraInput, directVideoCaptureInput, directFileInput].forEach((input) => {
             if (!input) return;
             input.addEventListener('change', (event) => {
                 const [file] = event.target.files || [];
+                if (!validateDirectAttachmentFile(file)) {
+                    event.target.value = '';
+                    return;
+                }
                 uploadDirectAttachment(file);
             });
         });
@@ -1274,6 +1786,37 @@
         if (directEmojiUploadTrigger) {
             directEmojiUploadTrigger.addEventListener('click', () => directEmojiUploadInput?.click());
         }
+
+        if (directCameraCaptureBtn) {
+            directCameraCaptureBtn.addEventListener('click', () => {
+                captureDirectCameraPhoto();
+            });
+        }
+
+        if (directCameraRecordBtn) {
+            directCameraRecordBtn.addEventListener('click', () => {
+                toggleDirectVideoRecording();
+            });
+        }
+
+        if (directCameraModal) {
+            directCameraModal.addEventListener('click', (event) => {
+                const closeTarget = event.target.closest('[data-camera-close="direct"]');
+                if (closeTarget) {
+                    closeDirectCameraModal();
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && directCameraModal && !directCameraModal.hidden) {
+                closeDirectCameraModal();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopDirectCameraStream();
+        });
 
         if (directEmojiUploadInput) {
             directEmojiUploadInput.addEventListener('change', async (event) => {
@@ -1328,10 +1871,20 @@
 
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
+                if (!directImageLightbox.hidden) {
+                    closeDirectImageLightbox();
+                    return;
+                }
                 hideDirectContextMenu();
                 if (directReplyDraftState) {
                     setDirectReplyDraft(null);
                 }
+            } else if (event.key === 'ArrowLeft' && !directImageLightbox.hidden) {
+                event.preventDefault();
+                stepDirectImageLightbox(-1);
+            } else if (event.key === 'ArrowRight' && !directImageLightbox.hidden) {
+                event.preventDefault();
+                stepDirectImageLightbox(1);
             }
         });
 
