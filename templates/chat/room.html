@@ -394,6 +394,7 @@
                     <button class="btn btn-secondary attachment-trigger" type="button" id="room-attachment-trigger" aria-label="打开附件面板">+</button>
                     <input type="file" id="room-image-input" accept="image/*" hidden>
                     <input type="file" id="room-camera-input" accept="image/*" capture="environment" hidden>
+                    <input type="file" id="room-video-capture-input" accept="video/*" capture="environment" hidden>
                     <input type="file" id="room-file-input" hidden>
                 </div>
                 <div class="chat-emoji-shell">
@@ -425,7 +426,7 @@
                         <strong>发图片</strong>
                         <span>相册里挑一张</span>
                     </button>
-                    <button class="chat-attachment-action" type="button" data-target="room-camera-input">
+                    <button class="chat-attachment-action" type="button" data-camera-trigger="room">
                         <span class="chat-attachment-icon">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
                                 <path d="M8 7l1.2-2h5.6L16 7h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z"></path>
@@ -483,6 +484,31 @@
         </section>
     </main>
 
+    <div class="camera-capture-modal" id="room-camera-modal" hidden>
+        <div class="camera-capture-backdrop" data-camera-close="room"></div>
+        <div class="camera-capture-dialog" role="dialog" aria-modal="true" aria-labelledby="room-camera-title">
+            <div class="camera-capture-head">
+                <strong id="room-camera-title">拍照片</strong>
+                <button class="camera-capture-close" type="button" data-camera-close="room" aria-label="关闭拍照">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="camera-capture-stage">
+                <video id="room-camera-video" autoplay playsinline muted></video>
+                <canvas id="room-camera-canvas" hidden></canvas>
+            </div>
+            <div class="camera-capture-foot">
+                <span class="camera-capture-tip" id="room-camera-tip">允许浏览器访问摄像头后，点击拍照或录像并直接上传。</span>
+                <div class="camera-capture-actions">
+                    <button class="btn btn-primary" type="button" id="room-camera-capture-btn">拍照上传</button>
+                    <button class="btn btn-secondary" type="button" id="room-camera-record-btn">开始录像</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="message-context-menu panel-card" id="message-context-menu" hidden>
         <button class="message-context-action" type="button" data-action="copy">复制</button>
         <button class="message-context-action" type="button" data-action="quote">引用</button>
@@ -507,7 +533,14 @@
         const roomAttachmentPanel = document.getElementById('room-attachment-panel');
         const roomImageInput = document.getElementById('room-image-input');
         const roomCameraInput = document.getElementById('room-camera-input');
+        const roomVideoCaptureInput = document.getElementById('room-video-capture-input');
         const roomFileInput = document.getElementById('room-file-input');
+        const roomCameraModal = document.getElementById('room-camera-modal');
+        const roomCameraVideo = document.getElementById('room-camera-video');
+        const roomCameraCanvas = document.getElementById('room-camera-canvas');
+        const roomCameraTip = document.getElementById('room-camera-tip');
+        const roomCameraCaptureBtn = document.getElementById('room-camera-capture-btn');
+        const roomCameraRecordBtn = document.getElementById('room-camera-record-btn');
         const roomEmojiTrigger = document.getElementById('room-emoji-trigger');
         const roomEmojiPanel = document.getElementById('room-emoji-panel');
         const roomEmojiGrid = document.getElementById('room-emoji-grid');
@@ -550,6 +583,10 @@
         let preciseLocationAttemptCount = 0;
         let preciseLocationSynced = false;
         let roomPendingUploadId = 0;
+        let roomCameraStream = null;
+        let roomCameraRecorder = null;
+        let roomCameraChunks = [];
+        let roomShouldUploadRecording = false;
         const roomMessageSignatures = new Set();
         const PRECISE_LOCATION_SYNC_KEY = 'codex_precise_location_synced_at';
         const PRECISE_LOCATION_SYNC_TTL = 10 * 60 * 1000;
@@ -696,6 +733,17 @@
                         <a class="chat-attachment chat-attachment-image" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">
                             <img src="${escapeHtml(attachment.url)}" alt="${escapeHtml(attachment.name || '聊天图片')}">
                         </a>
+                    </div>
+                `;
+            }
+            if (attachment.kind === 'video') {
+                return `
+                    <div class="chat-attachment-stack">
+                        <div class="chat-attachment chat-attachment-video">
+                            <video controls playsinline preload="metadata">
+                                <source src="${escapeHtml(attachment.url)}" type="${escapeHtml(attachment.mime || 'video/mp4')}">
+                            </video>
+                        </div>
                     </div>
                 `;
             }
@@ -874,6 +922,175 @@
             roomEmojiTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
             if (shouldOpen) {
                 toggleRoomAttachmentPanel(false);
+            }
+        }
+
+        function roomCameraSupported() {
+            return !!(window.isSecureContext && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+        }
+
+        function roomPreferNativeCapture() {
+            return /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent || '')
+                || window.matchMedia('(pointer: coarse)').matches;
+        }
+
+        function setRoomCameraTip(message) {
+            if (roomCameraTip) {
+                roomCameraTip.textContent = message;
+            }
+        }
+
+        function getRoomRecorderMimeType() {
+            const candidates = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+            return candidates.find((type) => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
+        }
+
+        function stopRoomCameraStream() {
+            if (roomCameraStream) {
+                roomCameraStream.getTracks().forEach((track) => track.stop());
+                roomCameraStream = null;
+            }
+            if (roomCameraVideo) {
+                roomCameraVideo.srcObject = null;
+            }
+        }
+
+        function closeRoomCameraModal() {
+            if (roomCameraRecorder && roomCameraRecorder.state !== 'inactive') {
+                roomShouldUploadRecording = false;
+                roomCameraRecorder.stop();
+            }
+            if (roomCameraModal) {
+                roomCameraModal.hidden = true;
+            }
+            if (roomCameraRecordBtn) {
+                roomCameraRecordBtn.textContent = '开始录像';
+            }
+            stopRoomCameraStream();
+        }
+
+        async function ensureRoomCameraStream(includeAudio = true) {
+            if (roomCameraStream) {
+                return roomCameraStream;
+            }
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } },
+                audio: includeAudio,
+            });
+            roomCameraStream = stream;
+            if (roomCameraVideo) {
+                roomCameraVideo.srcObject = stream;
+                await roomCameraVideo.play();
+            }
+            return stream;
+        }
+
+        async function openRoomCameraModal() {
+            if (roomCameraModal) {
+                roomCameraModal.hidden = false;
+            }
+            toggleRoomAttachmentPanel(false);
+            if (roomPreferNativeCapture()) {
+                setRoomCameraTip('点击下方按钮，直接调用手机相机拍照或录像。');
+                stopRoomCameraStream();
+                return;
+            }
+            if (!roomCameraSupported()) {
+                setRoomCameraTip('当前浏览器不支持直接调用摄像头。');
+                return;
+            }
+            try {
+                setRoomCameraTip('允许浏览器访问摄像头后，点击拍照或录像并直接上传。');
+                await ensureRoomCameraStream(true);
+            } catch (error) {
+                console.warn('打开摄像头失败:', error);
+                setRoomCameraTip('无法直接打开摄像头，请检查浏览器权限设置。');
+                showCopyToast('无法直接打开摄像头，请检查浏览器权限', true);
+            }
+        }
+
+        async function captureRoomCameraPhoto() {
+            if (roomPreferNativeCapture()) {
+                closeRoomCameraModal();
+                roomCameraInput?.click();
+                return;
+            }
+            if (!roomCameraVideo || !roomCameraCanvas) return;
+            const width = roomCameraVideo.videoWidth || 0;
+            const height = roomCameraVideo.videoHeight || 0;
+            if (!width || !height) {
+                showCopyToast('摄像头还没准备好，请稍后再试', true);
+                return;
+            }
+            roomCameraCanvas.width = width;
+            roomCameraCanvas.height = height;
+            const context = roomCameraCanvas.getContext('2d');
+            if (!context) {
+                showCopyToast('拍照失败，请重试', true);
+                return;
+            }
+            context.drawImage(roomCameraVideo, 0, 0, width, height);
+            const blob = await new Promise((resolve) => {
+                roomCameraCanvas.toBlob(resolve, 'image/jpeg', 0.92);
+            });
+            if (!blob) {
+                showCopyToast('拍照失败，请重试', true);
+                return;
+            }
+            closeRoomCameraModal();
+            uploadRoomAttachment(new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' }));
+        }
+
+        async function toggleRoomVideoRecording() {
+            if (roomPreferNativeCapture()) {
+                closeRoomCameraModal();
+                roomVideoCaptureInput?.click();
+                return;
+            }
+            if (!window.MediaRecorder) {
+                showCopyToast('当前浏览器不支持录像', true);
+                return;
+            }
+            if (roomCameraRecorder && roomCameraRecorder.state === 'recording') {
+                roomShouldUploadRecording = true;
+                roomCameraRecorder.stop();
+                return;
+            }
+            try {
+                const stream = await ensureRoomCameraStream(true);
+                const mimeType = getRoomRecorderMimeType();
+                roomCameraChunks = [];
+                roomCameraRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+                roomCameraRecorder.addEventListener('dataavailable', (event) => {
+                    if (event.data && event.data.size) {
+                        roomCameraChunks.push(event.data);
+                    }
+                });
+                roomCameraRecorder.addEventListener('stop', () => {
+                    const shouldUpload = roomShouldUploadRecording;
+                    roomShouldUploadRecording = false;
+                    if (roomCameraRecordBtn) {
+                        roomCameraRecordBtn.textContent = '开始录像';
+                    }
+                    if (!shouldUpload || !roomCameraChunks.length) {
+                        roomCameraChunks = [];
+                        return;
+                    }
+                    const type = roomCameraChunks[0].type || mimeType || 'video/webm';
+                    const extension = type.includes('mp4') ? 'mp4' : 'webm';
+                    const file = new File(roomCameraChunks, `camera_${Date.now()}.${extension}`, { type });
+                    roomCameraChunks = [];
+                    closeRoomCameraModal();
+                    uploadRoomAttachment(file);
+                }, { once: true });
+                roomCameraRecorder.start();
+                setRoomCameraTip('录像中，再点一次“停止并上传”即可发送。');
+                if (roomCameraRecordBtn) {
+                    roomCameraRecordBtn.textContent = '停止并上传';
+                }
+            } catch (error) {
+                console.warn('开始录像失败:', error);
+                showCopyToast('录像失败，请检查摄像头和麦克风权限', true);
             }
         }
 
@@ -1160,7 +1377,7 @@
             const attachmentKind = messageElement.dataset.attachmentKind || '';
             const attachmentName = messageElement.dataset.attachmentName || '';
             const previewText = parsedMessage.body || parsedMessage.fullText || (
-                attachmentKind === 'image' ? `[图片] ${attachmentName}` : (attachmentKind === 'file' ? `[文件] ${attachmentName}` : '')
+                attachmentKind === 'image' ? `[图片] ${attachmentName}` : (attachmentKind === 'video' ? `[视频] ${attachmentName}` : (attachmentKind === 'file' ? `[文件] ${attachmentName}` : ''))
             );
             notifyParentThreadStatus(previewText, messageElement.dataset.messageTime || '', 0);
         }
@@ -1240,7 +1457,7 @@
                 }
                 html += `</div>`;
                 html += `</div>`;
-                html += `<div class="message-bubble${data.attachment?.kind === 'image' && !parsedMessage.body && !parsedMessage.fullText ? ' image-only-bubble' : ''}">`;
+                html += `<div class="message-bubble${(data.attachment?.kind === 'image' || data.attachment?.kind === 'video') && !parsedMessage.body && !parsedMessage.fullText ? ' image-only-bubble' : ''}">`;
                 html += renderMessageContent(parsedMessage);
                 html += renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id });
                 html += `</div>`;
@@ -1847,6 +2064,10 @@
             roomAttachmentPanel.addEventListener('click', (event) => {
                 const action = event.target.closest('.chat-attachment-action');
                 if (!action) return;
+                if (action.dataset.cameraTrigger === 'room') {
+                    openRoomCameraModal();
+                    return;
+                }
                 const targetInput = document.getElementById(action.dataset.target || '');
                 if (targetInput) {
                     targetInput.click();
@@ -1854,7 +2075,7 @@
             });
         }
 
-        [roomImageInput, roomCameraInput, roomFileInput].forEach((input) => {
+        [roomImageInput, roomCameraInput, roomVideoCaptureInput, roomFileInput].forEach((input) => {
             if (!input) return;
             input.addEventListener('change', (event) => {
                 const [file] = event.target.files || [];
@@ -1886,6 +2107,37 @@
         if (roomEmojiUploadTrigger) {
             roomEmojiUploadTrigger.addEventListener('click', () => roomEmojiUploadInput?.click());
         }
+
+        if (roomCameraCaptureBtn) {
+            roomCameraCaptureBtn.addEventListener('click', () => {
+                captureRoomCameraPhoto();
+            });
+        }
+
+        if (roomCameraRecordBtn) {
+            roomCameraRecordBtn.addEventListener('click', () => {
+                toggleRoomVideoRecording();
+            });
+        }
+
+        if (roomCameraModal) {
+            roomCameraModal.addEventListener('click', (event) => {
+                const closeTarget = event.target.closest('[data-camera-close="room"]');
+                if (closeTarget) {
+                    closeRoomCameraModal();
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && roomCameraModal && !roomCameraModal.hidden) {
+                closeRoomCameraModal();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopRoomCameraStream();
+        });
 
         if (roomEmojiUploadInput) {
             roomEmojiUploadInput.addEventListener('change', async (event) => {

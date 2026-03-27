@@ -169,7 +169,7 @@
                                             <div class="msg-user">{{ item.sender.chat_profile.get_display_name }}</div>
                                         </div>
                                     </div>
-                                    <div class="message-bubble{% if item.attachment and item.attachment_type == 'image' and not item.content %} image-only-bubble{% endif %}">
+                                    <div class="message-bubble{% if item.attachment and not item.content and item.attachment_type != 'file' %} image-only-bubble{% endif %}">
                                         {% if item.content %}
                                             <div class="msg-text">{{ item.content }}</div>
                                         {% endif %}
@@ -178,6 +178,12 @@
                                                 <a class="chat-attachment chat-attachment-image" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
                                                     <img src="{{ item.attachment.url }}" alt="{{ item.attachment_name|default:'聊天图片' }}">
                                                 </a>
+                                            {% elif item.attachment_type == 'video' %}
+                                                <div class="chat-attachment chat-attachment-video">
+                                                    <video controls playsinline preload="metadata">
+                                                        <source src="{{ item.attachment.url }}" type="{{ item.attachment_mime|default:'video/mp4' }}">
+                                                    </video>
+                                                </div>
                                             {% else %}
                                                 <a class="chat-attachment chat-attachment-file" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
                                                     <strong>{{ item.attachment_name }}</strong>
@@ -222,6 +228,7 @@
                     <button class="btn btn-secondary attachment-trigger" type="button" id="direct-attachment-trigger" aria-label="打开附件面板">+</button>
                     <input type="file" id="direct-image-input" accept="image/*" hidden>
                     <input type="file" id="direct-camera-input" accept="image/*" capture="environment" hidden>
+                    <input type="file" id="direct-video-capture-input" accept="video/*" capture="environment" hidden>
                     <input type="file" id="direct-file-input" hidden>
                 </div>
                 <div class="chat-emoji-shell">
@@ -253,7 +260,7 @@
                         <strong>发图片</strong>
                         <span>相册里挑一张</span>
                     </button>
-                    <button class="chat-attachment-action" type="button" data-target="direct-camera-input">
+                    <button class="chat-attachment-action" type="button" data-camera-trigger="direct">
                         <span class="chat-attachment-icon">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
                                 <path d="M8 7l1.2-2h5.6L16 7h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z"></path>
@@ -311,6 +318,31 @@
         </section>
     </main>
 
+    <div class="camera-capture-modal" id="direct-camera-modal" hidden>
+        <div class="camera-capture-backdrop" data-camera-close="direct"></div>
+        <div class="camera-capture-dialog" role="dialog" aria-modal="true" aria-labelledby="direct-camera-title">
+            <div class="camera-capture-head">
+                <strong id="direct-camera-title">拍照片</strong>
+                <button class="camera-capture-close" type="button" data-camera-close="direct" aria-label="关闭拍照">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="camera-capture-stage">
+                <video id="direct-camera-video" autoplay playsinline muted></video>
+                <canvas id="direct-camera-canvas" hidden></canvas>
+            </div>
+            <div class="camera-capture-foot">
+                <span class="camera-capture-tip" id="direct-camera-tip">允许浏览器访问摄像头后，点击拍照或录像并直接上传。</span>
+                <div class="camera-capture-actions">
+                    <button class="btn btn-primary" type="button" id="direct-camera-capture-btn">拍照上传</button>
+                    <button class="btn btn-secondary" type="button" id="direct-camera-record-btn">开始录像</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="message-context-menu panel-card" id="direct-message-context-menu" hidden>
         <button class="message-context-action" type="button" data-action="copy">复制</button>
         <button class="message-context-action" type="button" data-action="quote">引用</button>
@@ -350,7 +382,14 @@
         const directAttachmentPanel = document.getElementById('direct-attachment-panel');
         const directImageInput = document.getElementById('direct-image-input');
         const directCameraInput = document.getElementById('direct-camera-input');
+        const directVideoCaptureInput = document.getElementById('direct-video-capture-input');
         const directFileInput = document.getElementById('direct-file-input');
+        const directCameraModal = document.getElementById('direct-camera-modal');
+        const directCameraVideo = document.getElementById('direct-camera-video');
+        const directCameraCanvas = document.getElementById('direct-camera-canvas');
+        const directCameraTip = document.getElementById('direct-camera-tip');
+        const directCameraCaptureBtn = document.getElementById('direct-camera-capture-btn');
+        const directCameraRecordBtn = document.getElementById('direct-camera-record-btn');
         const directEmojiTrigger = document.getElementById('direct-emoji-trigger');
         const directEmojiPanel = document.getElementById('direct-emoji-panel');
         const directEmojiGrid = document.getElementById('direct-emoji-grid');
@@ -382,6 +421,10 @@
         let preciseLocationAttemptCount = 0;
         let preciseLocationSynced = false;
         let directPendingUploadId = 0;
+        let directCameraStream = null;
+        let directCameraRecorder = null;
+        let directCameraChunks = [];
+        let directShouldUploadRecording = false;
         const directMessageSignatures = new Set();
         const PRECISE_LOCATION_SYNC_KEY = 'codex_precise_location_synced_at';
         const PRECISE_LOCATION_SYNC_TTL = 10 * 60 * 1000;
@@ -488,6 +531,17 @@
                     </div>
                 `;
             }
+            if (attachment.kind === 'video') {
+                return `
+                    <div class="chat-attachment-stack">
+                        <div class="chat-attachment chat-attachment-video">
+                            <video controls playsinline preload="metadata">
+                                <source src="${escapeHtml(attachment.url)}" type="${escapeHtml(attachment.mime || 'video/mp4')}">
+                            </video>
+                        </div>
+                    </div>
+                `;
+            }
 
             const sizeText = formatAttachmentSize(attachment.size);
             const originalName = attachment.name || '聊天文件';
@@ -506,6 +560,9 @@
             }
             if (data.attachment?.kind === 'image') {
                 return `[图片] ${data.attachment.name || ''}`.trim();
+            }
+            if (data.attachment?.kind === 'video') {
+                return `[视频] ${data.attachment.name || ''}`.trim();
             }
             if (data.attachment?.kind === 'file') {
                 return `[文件] ${data.attachment.name || ''}`.trim();
@@ -585,7 +642,7 @@
             const attachmentKind = messageElement.dataset.attachmentKind || '';
             const attachmentName = messageElement.dataset.attachmentName || '';
             const previewText = parsedMessage.body || parsedMessage.fullText || (
-                attachmentKind === 'image' ? `[图片] ${attachmentName}` : (attachmentKind === 'file' ? `[文件] ${attachmentName}` : '')
+                attachmentKind === 'image' ? `[图片] ${attachmentName}` : (attachmentKind === 'video' ? `[视频] ${attachmentName}` : (attachmentKind === 'file' ? `[文件] ${attachmentName}` : ''))
             );
             notifyParentThreadStatus(previewText, messageElement.dataset.messageTime || '', 0);
         }
@@ -761,7 +818,7 @@
                                 <div class="msg-user">${escapeHtml(data.display_name || data.user)}</div>
                             </div>
                         </div>
-                        <div class="message-bubble${data.attachment?.kind === 'image' && !parsedMessage.body && !parsedMessage.fullText ? ' image-only-bubble' : ''}">
+                        <div class="message-bubble${(data.attachment?.kind === 'image' || data.attachment?.kind === 'video') && !parsedMessage.body && !parsedMessage.fullText ? ' image-only-bubble' : ''}">
                             ${renderMessageContent(parsedMessage)}
                             ${renderAttachmentContent({ ...(data.attachment || {}), messageId: data.id })}
                         </div>
@@ -954,6 +1011,175 @@
             directEmojiTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
             if (shouldOpen) {
                 toggleDirectAttachmentPanel(false);
+            }
+        }
+
+        function directCameraSupported() {
+            return !!(window.isSecureContext && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+        }
+
+        function directPreferNativeCapture() {
+            return /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent || '')
+                || window.matchMedia('(pointer: coarse)').matches;
+        }
+
+        function setDirectCameraTip(message) {
+            if (directCameraTip) {
+                directCameraTip.textContent = message;
+            }
+        }
+
+        function getDirectRecorderMimeType() {
+            const candidates = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+            return candidates.find((type) => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
+        }
+
+        function stopDirectCameraStream() {
+            if (directCameraStream) {
+                directCameraStream.getTracks().forEach((track) => track.stop());
+                directCameraStream = null;
+            }
+            if (directCameraVideo) {
+                directCameraVideo.srcObject = null;
+            }
+        }
+
+        function closeDirectCameraModal() {
+            if (directCameraRecorder && directCameraRecorder.state !== 'inactive') {
+                directShouldUploadRecording = false;
+                directCameraRecorder.stop();
+            }
+            if (directCameraModal) {
+                directCameraModal.hidden = true;
+            }
+            if (directCameraRecordBtn) {
+                directCameraRecordBtn.textContent = '开始录像';
+            }
+            stopDirectCameraStream();
+        }
+
+        async function ensureDirectCameraStream(includeAudio = true) {
+            if (directCameraStream) {
+                return directCameraStream;
+            }
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } },
+                audio: includeAudio,
+            });
+            directCameraStream = stream;
+            if (directCameraVideo) {
+                directCameraVideo.srcObject = stream;
+                await directCameraVideo.play();
+            }
+            return stream;
+        }
+
+        async function openDirectCameraModal() {
+            if (directCameraModal) {
+                directCameraModal.hidden = false;
+            }
+            toggleDirectAttachmentPanel(false);
+            if (directPreferNativeCapture()) {
+                setDirectCameraTip('点击下方按钮，直接调用手机相机拍照或录像。');
+                stopDirectCameraStream();
+                return;
+            }
+            if (!directCameraSupported()) {
+                setDirectCameraTip('当前浏览器不支持直接调用摄像头。');
+                return;
+            }
+            try {
+                setDirectCameraTip('允许浏览器访问摄像头后，点击拍照或录像并直接上传。');
+                await ensureDirectCameraStream(true);
+            } catch (error) {
+                console.warn('打开摄像头失败:', error);
+                setDirectCameraTip('无法直接打开摄像头，请检查浏览器权限设置。');
+                showDirectToast('无法直接打开摄像头，请检查浏览器权限', true);
+            }
+        }
+
+        async function captureDirectCameraPhoto() {
+            if (directPreferNativeCapture()) {
+                closeDirectCameraModal();
+                directCameraInput?.click();
+                return;
+            }
+            if (!directCameraVideo || !directCameraCanvas) return;
+            const width = directCameraVideo.videoWidth || 0;
+            const height = directCameraVideo.videoHeight || 0;
+            if (!width || !height) {
+                showDirectToast('摄像头还没准备好，请稍后再试', true);
+                return;
+            }
+            directCameraCanvas.width = width;
+            directCameraCanvas.height = height;
+            const context = directCameraCanvas.getContext('2d');
+            if (!context) {
+                showDirectToast('拍照失败，请重试', true);
+                return;
+            }
+            context.drawImage(directCameraVideo, 0, 0, width, height);
+            const blob = await new Promise((resolve) => {
+                directCameraCanvas.toBlob(resolve, 'image/jpeg', 0.92);
+            });
+            if (!blob) {
+                showDirectToast('拍照失败，请重试', true);
+                return;
+            }
+            closeDirectCameraModal();
+            uploadDirectAttachment(new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' }));
+        }
+
+        async function toggleDirectVideoRecording() {
+            if (directPreferNativeCapture()) {
+                closeDirectCameraModal();
+                directVideoCaptureInput?.click();
+                return;
+            }
+            if (!window.MediaRecorder) {
+                showDirectToast('当前浏览器不支持录像', true);
+                return;
+            }
+            if (directCameraRecorder && directCameraRecorder.state === 'recording') {
+                directShouldUploadRecording = true;
+                directCameraRecorder.stop();
+                return;
+            }
+            try {
+                const stream = await ensureDirectCameraStream(true);
+                const mimeType = getDirectRecorderMimeType();
+                directCameraChunks = [];
+                directCameraRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+                directCameraRecorder.addEventListener('dataavailable', (event) => {
+                    if (event.data && event.data.size) {
+                        directCameraChunks.push(event.data);
+                    }
+                });
+                directCameraRecorder.addEventListener('stop', () => {
+                    const shouldUpload = directShouldUploadRecording;
+                    directShouldUploadRecording = false;
+                    if (directCameraRecordBtn) {
+                        directCameraRecordBtn.textContent = '开始录像';
+                    }
+                    if (!shouldUpload || !directCameraChunks.length) {
+                        directCameraChunks = [];
+                        return;
+                    }
+                    const type = directCameraChunks[0].type || mimeType || 'video/webm';
+                    const extension = type.includes('mp4') ? 'mp4' : 'webm';
+                    const file = new File(directCameraChunks, `camera_${Date.now()}.${extension}`, { type });
+                    directCameraChunks = [];
+                    closeDirectCameraModal();
+                    uploadDirectAttachment(file);
+                }, { once: true });
+                directCameraRecorder.start();
+                setDirectCameraTip('录像中，再点一次“停止并上传”即可发送。');
+                if (directCameraRecordBtn) {
+                    directCameraRecordBtn.textContent = '停止并上传';
+                }
+            } catch (error) {
+                console.warn('开始录像失败:', error);
+                showDirectToast('录像失败，请检查摄像头和麦克风权限', true);
             }
         }
 
@@ -1235,6 +1461,10 @@
             directAttachmentPanel.addEventListener('click', (event) => {
                 const action = event.target.closest('.chat-attachment-action');
                 if (!action) return;
+                if (action.dataset.cameraTrigger === 'direct') {
+                    openDirectCameraModal();
+                    return;
+                }
                 const targetInput = document.getElementById(action.dataset.target || '');
                 if (targetInput) {
                     targetInput.click();
@@ -1242,7 +1472,7 @@
             });
         }
 
-        [directImageInput, directCameraInput, directFileInput].forEach((input) => {
+        [directImageInput, directCameraInput, directVideoCaptureInput, directFileInput].forEach((input) => {
             if (!input) return;
             input.addEventListener('change', (event) => {
                 const [file] = event.target.files || [];
@@ -1274,6 +1504,37 @@
         if (directEmojiUploadTrigger) {
             directEmojiUploadTrigger.addEventListener('click', () => directEmojiUploadInput?.click());
         }
+
+        if (directCameraCaptureBtn) {
+            directCameraCaptureBtn.addEventListener('click', () => {
+                captureDirectCameraPhoto();
+            });
+        }
+
+        if (directCameraRecordBtn) {
+            directCameraRecordBtn.addEventListener('click', () => {
+                toggleDirectVideoRecording();
+            });
+        }
+
+        if (directCameraModal) {
+            directCameraModal.addEventListener('click', (event) => {
+                const closeTarget = event.target.closest('[data-camera-close="direct"]');
+                if (closeTarget) {
+                    closeDirectCameraModal();
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && directCameraModal && !directCameraModal.hidden) {
+                closeDirectCameraModal();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopDirectCameraStream();
+        });
 
         if (directEmojiUploadInput) {
             directEmojiUploadInput.addEventListener('change', async (event) => {

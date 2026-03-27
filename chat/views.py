@@ -417,6 +417,16 @@ def prepare_chat_attachment(uploaded_file, base_name):
             'attachment_size': optimized.size,
         }
 
+    if content_type.startswith('video/'):
+        uploaded_file.name = build_attachment_name(original_name, fallback='video')
+        return {
+            'file': uploaded_file,
+            'attachment_type': 'video',
+            'attachment_name': original_name,
+            'attachment_mime': content_type,
+            'attachment_size': size,
+        }
+
     uploaded_file.name = build_attachment_name(original_name)
     guessed_type = content_type or mimetypes.guess_type(original_name)[0] or 'application/octet-stream'
     return {
