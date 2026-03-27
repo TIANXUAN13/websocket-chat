@@ -175,7 +175,7 @@
                                         {% endif %}
                                         {% if item.attachment %}
                                             {% if item.attachment_type == 'image' %}
-                                                <a class="chat-attachment chat-attachment-image" href="{{ item.attachment.url }}" target="_blank" rel="noopener">
+                                                <a class="chat-attachment chat-attachment-image" href="{{ item.attachment.url }}" data-image-url="{{ item.attachment.url }}" data-image-name="{{ item.attachment_name|default:'聊天图片'|escape }}" aria-label="查看图片">
                                                     <img src="{{ item.attachment.url }}" alt="{{ item.attachment_name|default:'聊天图片' }}">
                                                 </a>
                                             {% elif item.attachment_type == 'video' %}
@@ -352,6 +352,31 @@
         </div>
     </div>
 
+    <div class="chat-lightbox" id="direct-image-lightbox" hidden>
+        <div class="chat-lightbox-backdrop" data-lightbox-close="1"></div>
+        <div class="chat-lightbox-panel" role="dialog" aria-modal="true" aria-label="图片预览">
+            <button class="chat-lightbox-close" type="button" id="direct-image-lightbox-close" aria-label="关闭图片预览">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+            <button class="chat-lightbox-nav is-prev" type="button" id="direct-image-lightbox-prev" aria-label="上一张图片">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 18l-6-6 6-6"/>
+                </svg>
+            </button>
+            <figure class="chat-lightbox-figure">
+                <img id="direct-image-lightbox-image" src="" alt="">
+                <figcaption id="direct-image-lightbox-caption"></figcaption>
+            </figure>
+            <button class="chat-lightbox-nav is-next" type="button" id="direct-image-lightbox-next" aria-label="下一张图片">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 6l6 6-6 6"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
     <div class="message-context-menu panel-card" id="direct-message-context-menu" hidden>
         <button class="message-context-action" type="button" data-action="copy">复制</button>
         <button class="message-context-action" type="button" data-action="quote">引用</button>
@@ -408,6 +433,12 @@
         const directEmojiUploadInput = document.getElementById('direct-emoji-upload-input');
         const directEmojiTabs = Array.from(document.querySelectorAll('#direct-emoji-panel .emoji-panel-tab'));
         const directMessageContextMenu = document.getElementById('direct-message-context-menu');
+        const directImageLightbox = document.getElementById('direct-image-lightbox');
+        const directImageLightboxImage = document.getElementById('direct-image-lightbox-image');
+        const directImageLightboxCaption = document.getElementById('direct-image-lightbox-caption');
+        const directImageLightboxPrev = document.getElementById('direct-image-lightbox-prev');
+        const directImageLightboxNext = document.getElementById('direct-image-lightbox-next');
+        const directImageLightboxClose = document.getElementById('direct-image-lightbox-close');
         const currentUsername = '{{ user.username }}';
         const otherUsername = {{ other_username_json }};
         const otherPublicId = '{{ other_public_id|escapejs }}';
@@ -441,6 +472,8 @@
         let directShouldUploadRecording = false;
         let directLongPressTimer = null;
         let directLongPressTriggered = false;
+        let directImageLightboxItems = [];
+        let directImageLightboxIndex = -1;
         const directMessageSignatures = new Set();
         const PRECISE_LOCATION_SYNC_KEY = 'codex_precise_location_synced_at';
         const PRECISE_LOCATION_SYNC_TTL = 10 * 60 * 1000;
@@ -550,7 +583,7 @@
             if (attachment.kind === 'image') {
                 return `
                     <div class="chat-attachment-stack">
-                        <a class="chat-attachment chat-attachment-image" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">
+                        <a class="chat-attachment chat-attachment-image" href="${escapeHtml(attachment.url)}" data-image-url="${escapeHtml(attachment.url)}" data-image-name="${escapeHtml(attachment.name || '聊天图片')}" aria-label="查看图片">
                             <img src="${escapeHtml(attachment.url)}" alt="${escapeHtml(attachment.name || '聊天图片')}">
                         </a>
                     </div>
@@ -690,6 +723,52 @@
                     <span>若无法播放，可点这里下载或新开查看</span>
                 </a>
             `;
+        }
+
+        function collectDirectImageLightboxItems() {
+            return Array.from(directMessageList.querySelectorAll('.chat-attachment-image')).map((link) => ({
+                url: link.dataset.imageUrl || link.getAttribute('href') || '',
+                name: link.dataset.imageName || link.querySelector('img')?.getAttribute('alt') || '聊天图片',
+                element: link,
+            })).filter((item) => item.url);
+        }
+
+        function syncDirectImageLightbox() {
+            const item = directImageLightboxItems[directImageLightboxIndex];
+            if (!item) return;
+            directImageLightboxImage.src = item.url;
+            directImageLightboxImage.alt = item.name;
+            directImageLightboxCaption.textContent = item.name;
+            const singleImage = directImageLightboxItems.length <= 1;
+            directImageLightboxPrev.hidden = singleImage;
+            directImageLightboxNext.hidden = singleImage;
+        }
+
+        function openDirectImageLightbox(targetLink) {
+            directImageLightboxItems = collectDirectImageLightboxItems();
+            directImageLightboxIndex = directImageLightboxItems.findIndex((item) => item.element === targetLink);
+            if (directImageLightboxIndex < 0) {
+                return;
+            }
+            syncDirectImageLightbox();
+            directImageLightbox.hidden = false;
+            document.body.classList.add('lightbox-open');
+        }
+
+        function closeDirectImageLightbox() {
+            directImageLightbox.hidden = true;
+            directImageLightboxImage.removeAttribute('src');
+            directImageLightboxImage.alt = '';
+            directImageLightboxCaption.textContent = '';
+            directImageLightboxItems = [];
+            directImageLightboxIndex = -1;
+            document.body.classList.remove('lightbox-open');
+        }
+
+        function stepDirectImageLightbox(step) {
+            if (directImageLightbox.hidden || !directImageLightboxItems.length) return;
+            directImageLightboxIndex = (directImageLightboxIndex + step + directImageLightboxItems.length) % directImageLightboxItems.length;
+            syncDirectImageLightbox();
         }
 
         function showDirectContextMenuAt(messageElement, clientX, clientY, anchorRect = null) {
@@ -1550,6 +1629,8 @@
             const videoPlayer = event.target.closest('.chat-attachment-video video');
             const messageElement = event.target.closest('.message');
             if (imageLink && messageElement) {
+                event.preventDefault();
+                openDirectImageLightbox(imageLink);
                 return;
             }
             if (videoPlayer && messageElement) {
@@ -1596,6 +1677,16 @@
                 window.clearTimeout(directLongPressTimer);
             }, { passive: true });
         });
+
+        directImageLightbox.addEventListener('click', function(event) {
+            if (event.target.closest('[data-lightbox-close="1"]')) {
+                closeDirectImageLightbox();
+            }
+        });
+
+        directImageLightboxClose.addEventListener('click', closeDirectImageLightbox);
+        directImageLightboxPrev.addEventListener('click', () => stepDirectImageLightbox(-1));
+        directImageLightboxNext.addEventListener('click', () => stepDirectImageLightbox(1));
 
         directChatForm.addEventListener('submit', function(event) {
             const message = directMessageInput.value.trim();
@@ -1780,10 +1871,20 @@
 
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
+                if (!directImageLightbox.hidden) {
+                    closeDirectImageLightbox();
+                    return;
+                }
                 hideDirectContextMenu();
                 if (directReplyDraftState) {
                     setDirectReplyDraft(null);
                 }
+            } else if (event.key === 'ArrowLeft' && !directImageLightbox.hidden) {
+                event.preventDefault();
+                stepDirectImageLightbox(-1);
+            } else if (event.key === 'ArrowRight' && !directImageLightbox.hidden) {
+                event.preventDefault();
+                stepDirectImageLightbox(1);
             }
         });
 

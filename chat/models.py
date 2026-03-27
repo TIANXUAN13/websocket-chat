@@ -416,6 +416,13 @@ class Message(models.Model):
     def __str__(self):
         return f"{self.username}: {self.message[:50]}"
 
+    def delete_attachment_files(self):
+        thumbnail_field = getattr(self, 'attachment_thumbnail', None)
+        if thumbnail_field:
+            thumbnail_field.delete(save=False)
+        if self.attachment:
+            self.attachment.delete(save=False)
+
 
 class Friendship(models.Model):
     """好友关系"""
@@ -526,6 +533,13 @@ class DirectMessage(models.Model):
         verbose_name = '私聊消息'
         verbose_name_plural = '私聊消息'
         ordering = ['created_at']
+
+    def delete_attachment_files(self):
+        thumbnail_field = getattr(self, 'attachment_thumbnail', None)
+        if thumbnail_field:
+            thumbnail_field.delete(save=False)
+        if self.attachment:
+            self.attachment.delete(save=False)
 
 
 class RoomVisitState(models.Model):

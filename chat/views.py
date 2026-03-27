@@ -1952,16 +1952,16 @@ def recall_room_message(request, room_name, message_id):
     if not can_recall_message(message.timestamp):
         return JsonResponse({'ok': False, 'error': 'recall_window_expired'}, status=400)
 
-    if message.attachment:
-        message.attachment.delete(save=False)
+    message.delete_attachment_files()
     message.message = '撤回了一条消息'
     message.message_type = 'chat'
     message.attachment = None
+    message.attachment_thumbnail = None
     message.attachment_type = 'text'
     message.attachment_name = ''
     message.attachment_mime = ''
     message.attachment_size = 0
-    message.save(update_fields=['message', 'message_type', 'attachment', 'attachment_type', 'attachment_name', 'attachment_mime', 'attachment_size'])
+    message.save(update_fields=['message', 'message_type', 'attachment', 'attachment_thumbnail', 'attachment_type', 'attachment_name', 'attachment_mime', 'attachment_size'])
 
     appearance = get_or_create_chat_profile(request.user).to_payload()
     payload = serialize_room_message_payload(message, appearance)
@@ -1985,8 +1985,7 @@ def delete_room_message(request, room_name, message_id):
     if message.user_id != request.user.id:
         return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
 
-    if message.attachment:
-        message.attachment.delete(save=False)
+    message.delete_attachment_files()
     deleted_id = message.id
     message.delete()
     payload = build_room_message_delete_payload(deleted_id)
@@ -2014,15 +2013,15 @@ def recall_direct_message(request, public_id, message_id):
     if not can_recall_message(message.created_at):
         return JsonResponse({'ok': False, 'error': 'recall_window_expired'}, status=400)
 
-    if message.attachment:
-        message.attachment.delete(save=False)
+    message.delete_attachment_files()
     message.content = '撤回了一条消息'
     message.attachment = None
+    message.attachment_thumbnail = None
     message.attachment_type = 'text'
     message.attachment_name = ''
     message.attachment_mime = ''
     message.attachment_size = 0
-    message.save(update_fields=['content', 'attachment', 'attachment_type', 'attachment_name', 'attachment_mime', 'attachment_size'])
+    message.save(update_fields=['content', 'attachment', 'attachment_thumbnail', 'attachment_type', 'attachment_name', 'attachment_mime', 'attachment_size'])
 
     appearance = get_or_create_chat_profile(request.user).to_payload()
     payload = serialize_direct_message_payload(message, appearance)
@@ -2049,8 +2048,7 @@ def delete_direct_message(request, public_id, message_id):
     if message.sender_id != request.user.id:
         return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
 
-    if message.attachment:
-        message.attachment.delete(save=False)
+    message.delete_attachment_files()
     deleted_id = message.id
     message.delete()
     payload = build_direct_message_delete_payload(deleted_id)
