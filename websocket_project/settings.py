@@ -4,6 +4,35 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def get_database_settings():
+    backend = os.getenv('DB_BACKEND', 'sqlite').strip().lower()
+    if backend in {'postgres', 'postgresql', 'pg'}:
+        database_config = {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', 'websocket_chat'),
+            'USER': os.getenv('DB_USER', 'postgres'),
+            'PASSWORD': os.getenv('DB_PASSWORD', ''),
+            'HOST': os.getenv('DB_HOST', '127.0.0.1'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+        }
+        sslmode = os.getenv('DB_SSLMODE', '').strip()
+        if sslmode:
+            database_config['OPTIONS'] = {
+                'sslmode': sslmode,
+            }
+        return {
+            'default': database_config,
+        }
+
+    sqlite_name = os.getenv('SQLITE_PATH', '').strip()
+    return {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': Path(sqlite_name) if sqlite_name else BASE_DIR / 'db.sqlite3',
+        }
+    }
+
 # 安全密钥（生产环境要修改）
 SECRET_KEY = 'django-insecure-your-secret-key-here'
 
@@ -82,12 +111,7 @@ WSGI_APPLICATION = 'websocket_project.wsgi.application'
 ASGI_APPLICATION = 'websocket_project.asgi.application'
 
 # 数据库配置
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+DATABASES = get_database_settings()
 
 # 密码验证
 AUTH_PASSWORD_VALIDATORS = [

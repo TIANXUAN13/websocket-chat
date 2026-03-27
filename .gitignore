@@ -22,6 +22,7 @@ staticfiles/
 # Environment files
 .env
 .env.*
+.runtime-db.env
 
 # Test / coverage artifacts
 .coverage
